@@ -1,0 +1,20 @@
+line := t={ linecomment | instruction } $
+linecomment := lc='[*;].*'
+instruction := s={ws? | codeline} sc=comment?
+ws := skip='\s+'
+comment := ';.*'
+
+codeline := l=label? c=content?
+label := label=identifier c=':'?
+identifier := '@?[a-zA-Z_][a-zA-Z0-9_]*'
+content := { opcode | directive }
+opcode := unimplemented
+directive := d={title | include | unimplemented}
+title := ws? dir='.title'i ws args=nqstring ws?
+include := ws? dir='.include'i ws args=nqstring ws?
+nqstring := nq={qstring | words}
+qstring := '"' v='[^"]*' '"'
+words := w={!'"' !'\s' '.*\S'}
+
+
+unimplemented := '##################################'
