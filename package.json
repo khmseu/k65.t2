@@ -1,0 +1,17 @@
+{
+  "name": "k65.t2",
+  "version": "1.0.0",
+  "description": "uses parser",
+  "license": "ISC",
+  "author": "Kai Henningsen <kai.extern@gmail.com>",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "tspeg": "^3.3.4",
+    "typescript": "^6.0.3"
+  }
+}
