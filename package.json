@@ -12,6 +12,9 @@
     "tsc": "tsc --build",
     "tspeg": "tspeg src/grammar/ma6.peg src/grammar/ma6.ts"
   },
+  "dependencies": {
+    "chevrotain": "^12.0.0"
+  },
   "devDependencies": {
     "@types/node": "^25.9.3",
     "tspeg": "^3.3.4",

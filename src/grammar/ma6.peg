@@ -5,16 +5,57 @@ ws := skip='\s+'
 comment := ';.*'
 
 codeline := l=label? c=content?
-label := label=identifier c=':'?
+label := label=identifier ws? c=':'?
 identifier := '@?[a-zA-Z_][a-zA-Z0-9_]*'
 content := { opcode | directive }
 opcode := unimplemented
-directive := d={title | include | unimplemented}
-title := ws? dir='.title'i ws args=nqstring ws?
-include := ws? dir='.include'i ws args=nqstring ws?
+
+directive := d={title | include | org | unimplemented}
+title := ws? dir='.title'i ws? ws args=nqstring ws?
+include := ws? dir='.include'i ws? ws args=nqstring ws?
+org := ws? dir='.org'i ws? ws args=expr ws?
+
 nqstring := nq={qstring | words}
 qstring := '"' v='[^"]*' '"'
 words := w={!'"' !'\s' '.*\S'}
 
+expr := v=or_expr
+or_expr := v={xor_expr | or_expr ws? OR_OP ws? xor_expr}
+xor_expr := v={and_expr | xor_expr ws? XOR_OP ws? and_expr}
+and_expr := v={equality_expr | and_expr ws? AND_OP ws? equality_expr}
+equality_expr := v={relational_expr | equality_expr ws? EQ ws? relational_expr | equality_expr ws? ASSIGN ws? relational_expr | equality_expr ws? NE ws? relational_expr}
+relational_expr := v={additive_expr | relational_expr ws? LT ws? additive_expr | relational_expr ws? GT ws? additive_expr | relational_expr ws? LE ws? additive_expr | relational_expr ws? GE ws? additive_expr}
+additive_expr := v={multiplicative_expr | additive_expr ws? PLUS ws? multiplicative_expr | additive_expr ws? MINUS ws? multiplicative_expr}
+multiplicative_expr := v={unary_expr | multiplicative_expr ws? STAR ws? unary_expr | multiplicative_expr ws? DIV ws? unary_expr | multiplicative_expr ws? MOD ws? unary_expr}
+unary_expr := v={primary_expr | PLUS ws? unary_expr | MINUS ws? unary_expr | BITNOT ws? unary_expr | LNOT ws? unary_expr | LT ws? unary_expr | GT ws? unary_expr}
+primary_expr := v={number_ | STRING | IDENT | STAR | LPAREN ws? expr ws? RPAREN}
+number_ := v={ DECNUM | HEXNUM | OCTNUM | BINNUM }
+
+OR_OP := '|'
+XOR_OP := '^'
+AND_OP := '&'
+EQ := '=='
+ASSIGN := '='
+NE := '!='
+LT := '<'
+GT := '>'
+LE := '<='
+GE := '>='
+PLUS := '\+'
+MINUS := '-'
+STAR := '\*'
+DIV := '/'
+MOD := '%'
+BITNOT := '~'
+LNOT := '!'
+LPAREN := '\('
+RPAREN := '\)'
+
+STRING :='\"' str='([^\"\\]|\\.)*' '\"'
+IDENT := '@?[a-zA-Z_][a-zA-Z0-9_]*'
+DECNUM := '[0-9]+'
+HEXNUM := '(0x|\$)[0-9a-fA-F]+'
+OCTNUM := '0o[0-7]+'
+BINNUM := '0b[01]+'
 
 unimplemented := '##################################'
