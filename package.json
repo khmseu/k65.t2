@@ -7,7 +7,10 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "npm run tspeg && npm run tsc",
+    "test": "npm run build && node dist/index.js test/m6502.converted.asm > test/m6502.converted.json",
+    "tsc": "tsc --build",
+    "tspeg": "tspeg src/grammar/ma6.peg src/grammar/ma6.ts"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",

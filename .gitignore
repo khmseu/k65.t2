@@ -142,3 +142,8 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Local additions
+test/A6502.jison
+test/m6502.converted.json
+docs/README.md
