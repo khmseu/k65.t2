@@ -2,6 +2,10 @@
 # Translated from Chevrotain lexer/parser (ma6Lexer.ts, Ma6Parser.ts)
 # Uses Moo tokens defined in ma6-lexer-moo.ts
 
+@{%
+// @ts-nocheck: Auto-generated file - ignoring type errors
+%}
+
 # ============================================================================
 # GRAMMAR RULES (Operator Precedence: Low to High)
 # ============================================================================

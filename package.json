@@ -8,7 +8,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "npm run nearleyc && npm run tsc",
-    "nearleyc": "nearleyc src/ma6.ne -o src/ma6-parser-generated.ts",
+    "nearleyc": "nearleyc src/ma6.ne -o src/generated/ma6-parser-generated.ts",
     "test": "npm run build && echo starting... && node dist/index.js test/m6502.converted.asm > test/m6502.converted.json; echo done rc=$?",
     "tsc": "tsc --build"
   },

@@ -13,7 +13,7 @@ import { Parser } from "nearley";
 
 // Import the grammar (not a default export, but a grammar object)
 // @ts-ignore: Generated file uses module.exports
-import grammar from "./ma6-parser-generated";
+import grammar from "./generated/ma6-parser-generated";
 
 // Import the lexer
 import { lexer } from "./ma6-lexer-moo.js";
