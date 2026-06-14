@@ -9,10 +9,12 @@ import moo from "moo";
 export const lexer = moo.compile({
   // Comments must be skipped/handled specially
   linecomment: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
     match: /^[\*;].*/,
     lineBreaks: false,
   },
   comment: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
     match: /;.*/,
     lineBreaks: false,
   },
@@ -73,47 +75,67 @@ export const lexer = moo.compile({
   HASH: /#/,
 
   // Registers (word boundary required)
-  REG_A: { match: /A\b/i, fast: true },
-  REG_X: { match: /X\b/i, fast: true },
-  REG_Y: { match: /Y\b/i, fast: true },
+  REG_A: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
+    match: /A\b/i,
+    fast: true,
+  },
+  REG_X: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
+    match: /X\b/i,
+    fast: true,
+  },
+  REG_Y: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
+    match: /Y\b/i,
+    fast: true,
+  },
 
   // String and character literals
   STRING: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
     match: /"(?:[^"\\]|\\.)*"/,
-    value: (s) => s.slice(1, -1).replace(/\\(.)/g, "$1"),
+    value: (s: string) => s.slice(1, -1).replace(/\\(.)/g, "$1"),
   },
   CHAR: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
     match: /'(?:[^'\\]|\\.)*'/,
-    value: (s) => s.slice(1, -1).replace(/\\(.)/g, "$1"),
+    value: (s: string) => s.slice(1, -1).replace(/\\(.)/g, "$1"),
   },
 
   // Numeric literals (in order of precedence)
   HEXNUM: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
     match: /(?:0x|\$)[0-9a-fA-F]+/,
-    value: (s) => parseInt(s.replace(/^0x/, "").replace(/^\$/, ""), 16),
+    value: (s: string) => parseInt(s.replace(/^0x/, "").replace(/^\$/, ""), 16),
   },
   OCTNUM: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
     match: /0o[0-7]+/,
-    value: (s) => parseInt(s.slice(2), 8),
+    value: (s: string) => parseInt(s.slice(2), 8),
   },
   BINNUM: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
     match: /(?:0b|%)[01]+/,
-    value: (s) => parseInt(s.replace(/^0b/, "").replace(/^%/, ""), 2),
+    value: (s: string) => parseInt(s.replace(/^0b/, "").replace(/^%/, ""), 2),
   },
   DECNUM: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
     match: /[0-9]+/,
-    value: (s) => parseInt(s, 10),
+    value: (s: string) => parseInt(s, 10),
   },
 
   // Identifiers (including @ prefix for local labels)
   IDENT: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
     match: /@?[a-zA-Z_][a-zA-Z0-9_]*/,
   },
 
   // Quoted strings (unescaped)
   Qstring: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
     match: /"[^"]*"/,
-    value: (s) => s.slice(1, -1),
+    value: (s: string) => s.slice(1, -1),
   },
 
   // Catch-all for unquoted words
@@ -121,6 +143,7 @@ export const lexer = moo.compile({
 
   // Whitespace (skipped)
   WS: {
+    // @ts-ignore: Moo type definitions conflict with RegExp
     match: /\s+/,
     lineBreaks: true,
   },

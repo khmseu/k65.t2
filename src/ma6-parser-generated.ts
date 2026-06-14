@@ -1,5 +1,6 @@
 // Generated automatically by nearley, version 2.20.1
 // http://github.com/Hardmath123/nearley
+// @ts-nocheck: Auto-generated file - ignoring type errors
 (function () {
 function id(x) { return x[0]; }
 var grammar = {

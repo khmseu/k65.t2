@@ -4,15 +4,19 @@
  *
  * Usage:
  *   1. Compile grammar: nearleyc src/ma6.ne -o src/ma6-parser-generated.ts
- *   2. Import: import { parser, lexer } from './ma6-parser-wrapper'
- *   3. Parse: const ast = parser.parse(input, { lexer })
+ *   2. Import: import { parseAssemblyLine } from './ma6-parser-wrapper'
+ *   3. Parse: const result = parseAssemblyLine(input)
  */
 
-import lexer from "./ma6-lexer-moo.js";
+import moo from "moo";
+import { Parser } from "nearley";
 
-// Import the generated parser from Nearley
-// NOTE: Run `nearleyc src/ma6.ne -o src/ma6-parser-generated.ts` first
-import nearleyParser from "./ma6-parser-generated.js";
+// Import the grammar (not a default export, but a grammar object)
+// @ts-ignore: Generated file uses module.exports
+import grammar from "./ma6-parser-generated";
+
+// Import the lexer
+import { lexer } from "./ma6-lexer-moo.js";
 
 export interface ParseResult {
   ast: any;
@@ -22,8 +26,16 @@ export interface ParseResult {
 }
 
 export interface ParserOptions {
-  lexer?: any;
+  lexer?: moo.Lexer;
   throwOnError?: boolean;
+}
+
+/**
+ * Create a new Nearley parser instance
+ */
+function createParser(): Parser {
+  const parser = new Parser(grammar.ParserRules, grammar.ParserStart);
+  return parser;
 }
 
 /**
@@ -36,23 +48,36 @@ export function parseAssemblyLine(
   input: string,
   options: ParserOptions = {},
 ): ParseResult {
-  const parser = nearleyParser;
+  const parser = createParser();
   const useLexer = options.lexer || lexer;
   const errors: string[] = [];
 
   try {
-    useLexer.reset();
-    useLexer.setText(input);
-    const result = parser.feed(useLexer);
+    useLexer.reset(input);
 
-    if (result.length === 0) {
+    let token = useLexer.next();
+    while (token) {
+      try {
+        // @ts-ignore: Moo tokens are compatible with Nearley feed method at runtime
+        parser.feed(token);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        errors.push(`Token error at position ${token.offset}: ${msg}`);
+        if (options.throwOnError) throw e;
+      }
+      token = useLexer.next();
+    }
+
+    const results = parser.finish();
+
+    if (results.length === 0) {
       errors.push(`No valid parse for: "${input}"`);
       return { ast: null, errors, input, line: 1 };
     }
 
     // Return first (most likely) parse result
     return {
-      ast: result[0],
+      ast: results[0],
       errors,
       input,
       line: 1,
@@ -100,8 +125,5 @@ export function parseAssemblyFile(
   return parseAssemblyLines(lines, options);
 }
 
-// Export lexer for direct use
-export { lexer };
-
-// Export parser for advanced usage
-export { nearleyParser as parser };
+// Export parser factory for advanced usage
+export { createParser };
