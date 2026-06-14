@@ -37,26 +37,24 @@ console.log('✓ Restructured grammar to module level');
 const rulesStart = content.indexOf('ParserRules: [');
 const rulesEnd = content.indexOf(', ParserStart:');
 console.log(`ParserRules found: start=${rulesStart}, end=${rulesEnd}`);
-if (rulesStart > -1 && rulesEnd > -1) {
-    const before = content.substring(0, rulesStart);
-    const rules = content.substring(rulesStart, rulesEnd);
-    const after = content.substring(rulesEnd);
-    
-    // In the rules section, quote bare identifiers (tokens)
-    // Match: [token or ,token (prefix is [,\s)
-    const quotedRules = rules.replace(/([,\[\s])([a-zA-Z_][a-zA-Z_0-9]*)(?=[\s,\]\}])/g, (match, prefix, id) => {
-        // Skip if it's a keyword or already quoted
-        if (id === 'null' || id === 'true' || id === 'false' || id === 'undefined' || id === 'function' || id === 'return') {
-            return match;
+// Convert token variable references to string references
+// ONLY within "symbols": [...] JSON arrays
+// This preserves postprocess callbacks and other identifiers
+content = content.replace(/"symbols":\s*\[([^\]]*)\]/g, (match) => {
+    // Within the symbols array, quote bare identifiers (but not those already quoted)
+    // Match bare identifiers not preceded/followed by quotes or { }
+    let quoted = match.replace(/(\[|,\s*)([a-zA-Z_][a-zA-Z_0-9]*)(?=[\s,\]])/g, (m, prefix, id) => {
+        // Don't quote if it's a keyword or JSON literal
+        if (['null', 'true', 'false', 'undefined'].includes(id)) {
+            return m;
         }
+        // Quote it
         return `${prefix}"${id}"`;
     });
-    
-    content = before + quotedRules + after;
-    console.log('✓ Converted token references to strings');
-} else {
-    console.log('⚠ Could not find ParserRules section');
-}
+    return quoted;
+});
+
+console.log('✓ Converted token references in symbols arrays');
 
 // Convert CommonJS export to ESM:
 // 1. Remove the CommonJS if/else block

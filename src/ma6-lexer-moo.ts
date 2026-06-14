@@ -20,32 +20,33 @@ export const lexer = moo.compile({
   },
 
   // Directives (must come before generic identifiers)
-  OrgDirective: /\.org/i,
-  EquDirective: /\.equ/i,
-  SetDirective: /\.set/i,
-  IncludeDirective: /\.include/i,
-  AlignDirective: /\.align/i,
-  MacroDirective: /\.macro/i,
-  EndMacroDirective: /\.endmacro/i,
-  RepeatDirective: /\.repeat/i,
-  EndRepeatDirective: /\.endrepeat/i,
-  IfDirective: /\.if/i,
-  ElseIfDirective: /\.elseif/i,
-  ElseDirective: /\.else/i,
-  EndIfDirective: /\.endif/i,
-  ByteDirective: /\.byte/i,
-  WordDirective: /\.word/i,
-  TextDirective: /\.text/i,
-  FillDirective: /\.fill/i,
-  ListDirective: /\.list/i,
-  NoListDirective: /\.nolist/i,
-  PageDirective: /\.page/i,
-  EjectDirective: /\.eject/i,
-  TitleDirective: /\.title/i,
-  SubttlDirective: /\.subttl/i,
-  PageSizeDirective: /\.pagesize/i,
-  BytesPerLineDirective: /\.bytesperline/i,
-  PrintDirective: /\.print/i,
+  // Note: Moo requires non-capturing groups (?:...) instead of /i flag
+  OrgDirective: /\.(?:org|ORG|Org)/,
+  EquDirective: /\.(?:equ|EQU|Equ)/,
+  SetDirective: /\.(?:set|SET|Set)/,
+  IncludeDirective: /\.(?:include|INCLUDE|Include)/,
+  AlignDirective: /\.(?:align|ALIGN|Align)/,
+  MacroDirective: /\.(?:macro|MACRO|Macro)/,
+  EndMacroDirective: /\.(?:endmacro|ENDMACRO|Endmacro)/,
+  RepeatDirective: /\.(?:repeat|REPEAT|Repeat)/,
+  EndRepeatDirective: /\.(?:endrepeat|ENDREPEAT|Endrepeat)/,
+  IfDirective: /\.(?:if|IF|If)/,
+  ElseIfDirective: /\.(?:elseif|ELSEIF|Elseif)/,
+  ElseDirective: /\.(?:else|ELSE|Else)/,
+  EndIfDirective: /\.(?:endif|ENDIF|Endif)/,
+  ByteDirective: /\.(?:byte|BYTE|Byte)/,
+  WordDirective: /\.(?:word|WORD|Word)/,
+  TextDirective: /\.(?:text|TEXT|Text)/,
+  FillDirective: /\.(?:fill|FILL|Fill)/,
+  ListDirective: /\.(?:list|LIST|List)/,
+  NoListDirective: /\.(?:nolist|NOLIST|Nolist)/,
+  PageDirective: /\.(?:page|PAGE|Page)/,
+  EjectDirective: /\.(?:eject|EJECT|Eject)/,
+  TitleDirective: /\.(?:title|TITLE|Title)/,
+  SubttlDirective: /\.(?:subttl|SUBTTL|Subttl)/,
+  PageSizeDirective: /\.(?:pagesize|PAGESIZE|Pagesize)/,
+  BytesPerLineDirective: /\.(?:bytesperline|BYTESPERLINE|Bytesperline)/,
+  PrintDirective: /\.(?:print|PRINT|Print)/,
 
   // Comparison operators (must come before single-char operators)
   EQ: /==/,
@@ -75,19 +76,20 @@ export const lexer = moo.compile({
   HASH: /#/,
 
   // Registers (word boundary required)
+  // Note: Moo doesn't support /i flag. Match both cases explicitly.
   REG_A: {
     // @ts-ignore: Moo type definitions conflict with RegExp
-    match: /A\b/i,
+    match: /[Aa]\b/,
     fast: true,
   },
   REG_X: {
     // @ts-ignore: Moo type definitions conflict with RegExp
-    match: /X\b/i,
+    match: /[Xx]\b/,
     fast: true,
   },
   REG_Y: {
     // @ts-ignore: Moo type definitions conflict with RegExp
-    match: /Y\b/i,
+    match: /[Yy]\b/,
     fast: true,
   },
 
