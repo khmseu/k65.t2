@@ -22,9 +22,11 @@ import {
   EndRepeatDirective as ENDREPEAT,
   EQ,
   EquDirective as EQU,
+  ESCAPE,
   FillDirective as FILL,
   GE,
   GT,
+  HASH,
   HEXNUM,
   IDENT,
   IfDirective as IF,
@@ -329,6 +331,12 @@ export class Ma6Parser extends CstParser {
       },
       {
         ALT: () => {
+          this.CONSUME(HASH);
+          this.SUBRULE(this.expr);
+        },
+      },
+      {
+        ALT: () => {
           this.SUBRULE(this.expr);
         },
       },
@@ -489,6 +497,12 @@ export class Ma6Parser extends CstParser {
       { ALT: () => this.SUBRULE(this.number) },
       { ALT: () => this.CONSUME(CHAR) },
       { ALT: () => this.CONSUME(IDENT) },
+      {
+        ALT: () => {
+          this.CONSUME(ESCAPE);
+          this.CONSUME(IDENT);
+        },
+      },
       { ALT: () => this.CONSUME(STAR) },
       {
         ALT: () => {

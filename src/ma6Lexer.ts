@@ -157,6 +157,8 @@ export const LPAREN = createToken({ name: "LPAREN", pattern: "(" });
 export const RPAREN = createToken({ name: "RPAREN", pattern: ")" });
 export const COMMA = createToken({ name: "COMMA", pattern: "," });
 export const COLON = createToken({ name: "COLON", pattern: ":" });
+export const ESCAPE = createToken({ name: "ESCAPE", pattern: "\\" });
+export const HASH = createToken({ name: "HASH", pattern: "#" });
 export const REG_A = createToken({ name: "REG_A", pattern: /A\b/i });
 export const REG_X = createToken({ name: "REG_X", pattern: /X\b/i });
 export const REG_Y = createToken({ name: "REG_Y", pattern: /Y\b/i });
@@ -331,7 +333,9 @@ export const allTokens = [
   RPAREN,
   COMMA,
   COLON,
+  ESCAPE,
 
+  HASH,
   REG_A,
   REG_X,
   REG_Y,
