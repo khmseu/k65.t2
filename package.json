@@ -8,7 +8,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "npm run tspeg && npm run tsc",
-    "test": "npm run build && node dist/index.js test/m6502.converted.asm > test/m6502.converted.json",
+    "test": "npm run build && echo starting... && node dist/index.js test/m6502.converted.asm > test/m6502.converted.json; echo done rc=$?",
     "tsc": "tsc --build",
     "tspeg": "tspeg src/grammar/ma6.peg src/grammar/ma6.ts"
   },
