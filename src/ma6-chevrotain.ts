@@ -82,7 +82,7 @@ type SimpleToken = {
   tokenType: string;
   payload?: string | any;
 };
-const BaseCstVisitor = parserInstance.getBaseCstVisitorConstructorWithDefaults<
+const BaseCstVisitor = parserInstance.getBaseCstVisitorConstructor<
   SimpleToken[],
   void
 >();
