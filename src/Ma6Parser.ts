@@ -1,41 +1,42 @@
 import { CstParser } from "chevrotain";
 import {
   allTokens,
-  linecomment,
-  Comment,
-  Identifier,
-  Colon,
-  Unimplemented,
-  TitleDirective,
-  IncludeDirective,
-  OrgDirective,
-  Qstring,
-  Words,
-  OR_OP,
-  XOR_OP,
   AND_OP,
-  EQ,
   ASSIGN,
-  NE,
-  LT,
-  GT,
-  LE,
-  GE,
-  PLUS,
-  MINUS,
-  STAR,
-  DIV,
-  MOD,
-  BITNOT,
-  LNOT,
-  STRING,
-  IDENT,
-  LPAREN,
-  RPAREN,
-  HEXNUM,
-  DECNUM,
-  OCTNUM,
   BINNUM,
+  BITNOT,
+  Colon,
+  Comment,
+  DECNUM,
+  DIV,
+  EQ,
+  GE,
+  GT,
+  HEXNUM,
+  IDENT,
+  Identifier,
+  IncludeDirective,
+  LE,
+  linecomment,
+  LNOT,
+  LPAREN,
+  LT,
+  MINUS,
+  MOD,
+  NE,
+  OCTNUM,
+  OR_OP,
+  OrgDirective,
+  PLUS,
+  Qstring,
+  RPAREN,
+  STAR,
+  STRING,
+  SubttlDirective,
+  TitleDirective,
+  Unimplemented,
+  Words,
+  XOR_OP,
 } from "./ma6Lexer.js";
 
 // ============================================================================
@@ -99,6 +100,7 @@ export class Ma6Parser extends CstParser {
       { ALT: () => this.SUBRULE(this.title) },
       { ALT: () => this.SUBRULE(this.include) },
       { ALT: () => this.SUBRULE(this.org) },
+      { ALT: () => this.SUBRULE(this.subttl) },
     ]);
   });
 
@@ -115,6 +117,11 @@ export class Ma6Parser extends CstParser {
   public org = this.RULE("org", () => {
     this.CONSUME(OrgDirective);
     this.SUBRULE(this.expr);
+  });
+
+  public subttl = this.RULE("subttl", () => {
+    this.CONSUME(SubttlDirective);
+    this.SUBRULE(this.nqstring);
   });
 
   public nqstring = this.RULE("nqstring", () => {

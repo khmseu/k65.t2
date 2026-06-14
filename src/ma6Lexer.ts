@@ -40,6 +40,11 @@ export const OrgDirective = createToken({
   pattern: /\.org/i,
 });
 
+export const SubttlDirective = createToken({
+  name: "SubttlDirective",
+  pattern: /\.subttl/i,
+});
+
 export const Colon = createToken({
   name: "Colon",
   pattern: ":",
@@ -47,7 +52,13 @@ export const Colon = createToken({
 
 export const Qstring = createToken({
   name: "Qstring",
-  pattern: /"[^"]*"/,
+  pattern: (text, startOffset) => {
+    const result: RERWP = /"([^"]*)"/.exec(text.substring(startOffset));
+    if (result && result[1]) result.payload = result[1];
+    return result;
+  },
+  start_chars_hint: ['"'],
+  line_breaks: false,
 });
 
 export const Identifier = createToken({
@@ -136,7 +147,7 @@ export const DECNUM = createToken({
     if (result) result.payload = parseInt(result[0], 10);
     return result;
   },
-  start_chars_hint: [],
+  start_chars_hint: [...Array.from({ length: 10 }, (_, i) => i + 0x30)],
   line_breaks: false,
 });
 export const HEXNUM = createToken({
@@ -148,7 +159,7 @@ export const HEXNUM = createToken({
     if (result && result[1]) result.payload = parseInt(result[1], 16);
     return result;
   },
-  start_chars_hint: [],
+  start_chars_hint: ["0", "$"],
   line_breaks: false,
 });
 export const OCTNUM = createToken({
@@ -158,7 +169,7 @@ export const OCTNUM = createToken({
     if (result && result[1]) result.payload = parseInt(result[1], 8);
     return result;
   },
-  start_chars_hint: [],
+  start_chars_hint: ["0"],
   line_breaks: false,
 });
 export const BINNUM = createToken({
@@ -168,7 +179,7 @@ export const BINNUM = createToken({
     if (result && result[1]) result.payload = parseInt(result[1], 2);
     return result;
   },
-  start_chars_hint: [],
+  start_chars_hint: ["%"],
   line_breaks: false,
 });
 
@@ -189,10 +200,10 @@ export const allTokens = [
   TitleDirective,
   IncludeDirective,
   OrgDirective,
+  SubttlDirective,
   Colon,
   Qstring,
   Identifier,
-  Words,
   OR_OP,
   XOR_OP,
   AND_OP,
@@ -220,6 +231,8 @@ export const allTokens = [
   BINNUM,
   Unimplemented,
   WS,
+  // last
+  Words,
 ];
 
 // ============================================================================

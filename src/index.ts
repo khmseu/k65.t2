@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   createDtsFromParser,
   generateSyntaxDiagrams,
+  in_short,
   parseAssemblyLine,
 } from "./ma6-chevrotain.js";
 
@@ -26,7 +27,8 @@ if (filename !== undefined) {
   let errs = 0;
   for (const line of lines) {
     const result = parseAssemblyLine(line);
-    console.log(JSON.stringify({ line, result }, null, 2), ",");
+    const short = in_short(result.ast);
+    console.log(JSON.stringify({ line, result, short }, null, 2), ",");
     if (result.errs.length > 0) {
       errs++;
       if (errs > 10) {
