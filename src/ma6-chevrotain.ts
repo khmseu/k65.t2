@@ -37,19 +37,16 @@ export const K_linecomment = createToken({
 export const K_TitleDirective = createToken({
   name: "K_TitleDirective",
   pattern: /\.title/i,
-  longer_alt: undefined,
 });
 
 export const K_IncludeDirective = createToken({
   name: "K_IncludeDirective",
   pattern: /\.include/i,
-  longer_alt: undefined,
 });
 
 export const K_OrgDirective = createToken({
   name: "K_OrgDirective",
   pattern: /\.org/i,
-  longer_alt: undefined,
 });
 
 export const K_Colon = createToken({

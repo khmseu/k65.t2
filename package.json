@@ -7,17 +7,15 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "npm run tspeg && npm run tsc",
+    "build": "npm run tsc",
     "test": "npm run build && echo starting... && node dist/index.js test/m6502.converted.asm > test/m6502.converted.json; echo done rc=$?",
-    "tsc": "tsc --build",
-    "tspeg": "tspeg src/grammar/ma6.peg src/grammar/ma6.ts"
+    "tsc": "tsc --build"
   },
   "dependencies": {
     "chevrotain": "^12.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",
-    "tspeg": "^3.3.4",
     "typescript": "^6.0.3"
   }
 }

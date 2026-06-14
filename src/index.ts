@@ -6,7 +6,7 @@ import {
   createDtsFromParser,
   generateSyntaxDiagrams,
   parseAssemblyLine,
-} from "./grammar/ma6-chevrotain.js";
+} from "./ma6-chevrotain.js";
 
 const args = process.argv.slice(2);
 if (args.length === 0) {

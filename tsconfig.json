@@ -11,8 +11,12 @@
     "target": "esnext",
     // "types": [],
     // For nodejs:
-    "lib": ["esnext"],
-    "types": ["node"],
+    "lib": [
+      "esnext"
+    ],
+    "types": [
+      "node"
+    ],
     // and npm install -D @types/node
     // Other Outputs
     "sourceMap": true,
@@ -37,10 +41,8 @@
     "moduleDetection": "force",
     "skipLibCheck": true
   },
-  "exclude": ["dist", "node_modules", "src/grammar"],
-  "references": [
-    {
-      "path": "./src/grammar"
-    }
-  ]
+  "exclude": [
+    "dist",
+    "node_modules",
+  ],
 }
