@@ -9,11 +9,12 @@
  */
 
 import moo from "moo";
-import { Parser } from "nearley";
+import nearley from "nearley";
+const { Parser } = nearley;
 
 // Import the grammar (not a default export, but a grammar object)
 // @ts-ignore: Generated file uses module.exports
-import grammar from "./generated/ma6-parser-generated";
+import grammar from "./generated/ma6-parser-generated.js";
 
 // Import the lexer
 import { lexer } from "./ma6-lexer-moo.js";
@@ -33,7 +34,7 @@ export interface ParserOptions {
 /**
  * Create a new Nearley parser instance
  */
-function createParser(): Parser {
+function createParser(): InstanceType<typeof Parser> {
   const parser = new Parser(grammar.ParserRules, grammar.ParserStart);
   return parser;
 }

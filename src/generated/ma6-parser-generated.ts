@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Generated automatically by nearley, version 2.20.1
 // http://github.com/Hardmath123/nearley
 (function () {
@@ -135,9 +136,6 @@ var grammar = {
 ]
   , ParserStart: "line"
 }
-if (typeof module !== 'undefined'&& typeof module.exports !== 'undefined') {
-   module.exports = grammar;
-} else {
-   window.grammar = grammar;
-}
 })();
+
+export default grammar;
