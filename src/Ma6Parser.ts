@@ -122,19 +122,14 @@ export class Ma6Parser extends CstParser {
     this.OR([
       {
         ALT: () => {
-          this.CONSUME(ORG);
-          this.SUBRULE(this.expr);
-        },
-      },
-      {
-        ALT: () => {
-          this.CONSUME(EQU);
-          this.SUBRULE(this.expr);
-        },
-      },
-      {
-        ALT: () => {
-          this.CONSUME(SET);
+          this.OR1([
+            { ALT: () => this.CONSUME(ORG) },
+            { ALT: () => this.CONSUME(EQU) },
+            { ALT: () => this.CONSUME(SET) },
+            { ALT: () => this.CONSUME(REPEAT) },
+            { ALT: () => this.CONSUME(IF) },
+            { ALT: () => this.CONSUME(ELSEIF) },
+          ]);
           this.SUBRULE(this.expr);
         },
       },
@@ -147,7 +142,7 @@ export class Ma6Parser extends CstParser {
       {
         ALT: () => {
           this.CONSUME(ALIGN);
-          this.SUBRULE(this.expr);
+          this.SUBRULE1(this.expr);
           this.OPTION(() => {
             this.CONSUME(COMMA);
             this.SUBRULE2(this.expr);
@@ -158,8 +153,8 @@ export class Ma6Parser extends CstParser {
         ALT: () => {
           this.CONSUME(MACRO);
           this.CONSUME(IDENT);
-          this.OPTION(() => {
-            this.CONSUME(COMMA);
+          this.OPTION1(() => {
+            this.CONSUME1(COMMA);
             this.SUBRULE(this.macro_args);
           });
         },
@@ -171,31 +166,7 @@ export class Ma6Parser extends CstParser {
       },
       {
         ALT: () => {
-          this.CONSUME(REPEAT);
-          this.SUBRULE(this.expr);
-        },
-      },
-      {
-        ALT: () => {
           this.CONSUME(ENDREPEAT);
-        },
-      },
-      {
-        ALT: () => {
-          this.CONSUME(IF);
-          this.SUBRULE(this.expr);
-        },
-      },
-      {
-        ALT: () => {
-          this.CONSUME(IF);
-          this.SUBRULE(this.expr);
-        },
-      },
-      {
-        ALT: () => {
-          this.CONSUME(ELSEIF);
-          this.SUBRULE(this.expr);
         },
       },
       {
@@ -217,7 +188,7 @@ export class Ma6Parser extends CstParser {
       {
         ALT: () => {
           this.CONSUME(WORD);
-          this.SUBRULE(this.arg_list);
+          this.SUBRULE1(this.arg_list);
         },
       },
       {
@@ -229,10 +200,10 @@ export class Ma6Parser extends CstParser {
       {
         ALT: () => {
           this.CONSUME(FILL);
-          this.SUBRULE(this.expr);
-          this.OPTION1(() => {
-            this.CONSUME(COMMA);
-            this.SUBRULE2(this.expr);
+          this.SUBRULE3(this.expr);
+          this.OPTION2(() => {
+            this.CONSUME2(COMMA);
+            this.SUBRULE4(this.expr);
           });
         },
       },
@@ -259,31 +230,31 @@ export class Ma6Parser extends CstParser {
       {
         ALT: () => {
           this.CONSUME(TITLE);
-          this.SUBRULE(this.nqstring);
+          this.SUBRULE1(this.nqstring);
         },
       },
       {
         ALT: () => {
           this.CONSUME(SUBTTL);
-          this.SUBRULE(this.nqstring);
+          this.SUBRULE2(this.nqstring);
         },
       },
       {
         ALT: () => {
           this.CONSUME(PAGESIZE);
-          this.SUBRULE(this.expr);
+          this.SUBRULE5(this.expr);
         },
       },
       {
         ALT: () => {
           this.CONSUME(BYTESPERLINE);
-          this.SUBRULE(this.expr);
+          this.SUBRULE6(this.expr);
         },
       },
       {
         ALT: () => {
           this.CONSUME(PRINT);
-          this.SUBRULE(this.nqstring);
+          this.SUBRULE3(this.nqstring);
         },
       },
     ]);
@@ -337,44 +308,48 @@ export class Ma6Parser extends CstParser {
       },
       {
         ALT: () => {
-          this.SUBRULE(this.expr);
-        },
-      },
-      {
-        ALT: () => {
-          this.CONSUME(LPAREN);
-          this.SUBRULE(this.expr);
-          this.CONSUME(RPAREN);
+          this.SUBRULE1(this.expr);
         },
       },
       {
         ALT: () => {
           this.CONSUME(LPAREN);
           this.SUBRULE2(this.expr);
-          this.CONSUME(COMMA);
-          this.CONSUME(REG_X);
           this.CONSUME(RPAREN);
         },
       },
       {
         ALT: () => {
-          this.CONSUME(LPAREN);
+          this.CONSUME1(LPAREN);
           this.SUBRULE3(this.expr);
-          this.CONSUME(COMMA);
-          this.CONSUME(REG_Y);
-          this.CONSUME(RPAREN);
+          this.CONSUME1(COMMA);
+          this.CONSUME(REG_X);
+          this.CONSUME1(RPAREN);
         },
       },
       {
         ALT: () => {
+          this.CONSUME2(LPAREN);
           this.SUBRULE4(this.expr);
-          this.CONSUME(COMMA);
+          this.CONSUME2(COMMA);
+          this.CONSUME(REG_Y);
+          this.CONSUME2(RPAREN);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME3(LPAREN);
+          this.SUBRULE5(this.expr);
+          this.CONSUME3(RPAREN);
+          this.CONSUME3(COMMA);
           this.CONSUME2(REG_X);
         },
       },
       {
         ALT: () => {
-          this.SUBRULE5(this.expr);
+          this.CONSUME4(LPAREN);
+          this.SUBRULE6(this.expr);
+          this.CONSUME4(RPAREN);
           this.CONSUME(COMMA);
           this.CONSUME2(REG_Y);
         },
@@ -500,15 +475,15 @@ export class Ma6Parser extends CstParser {
       {
         ALT: () => {
           this.CONSUME(ESCAPE);
-          this.CONSUME(IDENT);
+          this.CONSUME1(IDENT);
         },
       },
       { ALT: () => this.CONSUME(STAR) },
       {
         ALT: () => {
-          this.CONSUME(LPAREN);
-          this.SUBRULE(this.expr);
-          this.CONSUME(RPAREN);
+          this.CONSUME3(LPAREN);
+          this.SUBRULE3(this.expr);
+          this.CONSUME3(RPAREN);
         },
       },
     ]);
