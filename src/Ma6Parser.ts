@@ -1,40 +1,66 @@
 import { CstParser } from "chevrotain";
 import {
+  AlignDirective as ALIGN,
   allTokens,
   AND_OP,
   ASSIGN,
   BINNUM,
   BITNOT,
-  Colon,
+  ByteDirective as BYTE,
+  BytesPerLineDirective as BYTESPERLINE,
+  CHAR,
+  COLON,
+  COMMA,
   Comment,
   DECNUM,
   DIV,
+  EjectDirective as EJECT,
+  ElseDirective as ELSE,
+  ElseIfDirective as ELSEIF,
+  EndIfDirective as ENDIF,
+  EndMacroDirective as ENDMACRO,
+  EndRepeatDirective as ENDREPEAT,
   EQ,
+  EquDirective as EQU,
+  FillDirective as FILL,
   GE,
   GT,
   HEXNUM,
   IDENT,
-  Identifier,
+  IfDirective as IF,
   IncludeDirective,
   LE,
   linecomment,
+  ListDirective as LIST,
   LNOT,
   LPAREN,
   LT,
+  MacroDirective as MACRO,
   MINUS,
   MOD,
   NE,
+  NoListDirective as NOLIST,
   OCTNUM,
   OR_OP,
-  OrgDirective,
+  OrgDirective as ORG,
+  PageDirective as PAGE,
+  PageSizeDirective as PAGESIZE,
   PLUS,
+  PrintDirective as PRINT,
   Qstring,
+  REG_A,
+  REG_X,
+  REG_Y,
+  RepeatDirective as REPEAT,
   RPAREN,
+  SetDirective as SET,
   STAR,
   STRING,
-  SubttlDirective,
-  TitleDirective,
+  SubttlDirective as SUBTTL,
+  TextDirective as TEXT,
+  TitleDirective as TITLE,
   Unimplemented,
+  WordDirective as WORD,
   Words,
   XOR_OP,
 } from "./ma6Lexer.js";
@@ -51,83 +77,315 @@ export class Ma6Parser extends CstParser {
     });
     this.performSelfAnalysis();
   }
-
   public line = this.RULE("line", () => {
     this.OR([
       { ALT: () => this.CONSUME(linecomment) },
-      { ALT: () => this.SUBRULE(this.instruction) },
+      {
+        ALT: () => {
+          this.OPTION(() => {
+            this.SUBRULE(this.code_line);
+          });
+          this.OPTION1(() => {
+            this.CONSUME(Comment);
+          });
+        },
+      },
     ]);
   });
 
-  public instruction = this.RULE("instruction", () => {
+  public code_line = this.RULE("code_line", () => {
     this.OPTION(() => {
-      this.SUBRULE(this.codeline);
+      this.CONSUME(IDENT);
+      this.OPTION1(() => {
+        this.CONSUME(COLON);
+      });
     });
-    this.OPTION1(() => {
-      this.CONSUME(Comment);
+    this.OPTION2(() => {
+      this.OR([
+        { ALT: () => this.SUBRULE(this.directive) },
+        { ALT: () => this.SUBRULE(this.assignment) },
+        {
+          ALT: () => {
+            this.SUBRULE(this.operation);
+            this.MANY(() => {
+              this.SUBRULE(this.arg_list);
+            });
+          },
+        },
+      ]);
     });
-  });
-
-  public codeline = this.RULE("codeline", () => {
-    this.OPTION(() => {
-      this.SUBRULE(this.label);
-    });
-    this.OPTION1(() => {
-      this.SUBRULE(this.content);
-    });
-  });
-
-  public label = this.RULE("label", () => {
-    this.CONSUME(Identifier);
-    this.OPTION(() => {
-      this.CONSUME(Colon);
-    });
-  });
-
-  public content = this.RULE("content", () => {
-    this.OR([
-      { ALT: () => this.SUBRULE(this.opcode) },
-      { ALT: () => this.SUBRULE(this.directive) },
-    ]);
-  });
-
-  public opcode = this.RULE("opcode", () => {
-    this.CONSUME(Unimplemented);
   });
 
   public directive = this.RULE("directive", () => {
     this.OR([
-      { ALT: () => this.SUBRULE(this.title) },
-      { ALT: () => this.SUBRULE(this.include) },
-      { ALT: () => this.SUBRULE(this.org) },
-      { ALT: () => this.SUBRULE(this.subttl) },
+      {
+        ALT: () => {
+          this.CONSUME(ORG);
+          this.SUBRULE(this.expr);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(EQU);
+          this.SUBRULE(this.expr);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(SET);
+          this.SUBRULE(this.expr);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(IncludeDirective);
+          this.SUBRULE(this.nqstring);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(ALIGN);
+          this.SUBRULE(this.expr);
+          this.OPTION(() => {
+            this.CONSUME(COMMA);
+            this.SUBRULE2(this.expr);
+          });
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(MACRO);
+          this.CONSUME(IDENT);
+          this.OPTION(() => {
+            this.CONSUME(COMMA);
+            this.SUBRULE(this.macro_args);
+          });
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(ENDMACRO);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(REPEAT);
+          this.SUBRULE(this.expr);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(ENDREPEAT);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(IF);
+          this.SUBRULE(this.expr);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(IF);
+          this.SUBRULE(this.expr);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(ELSEIF);
+          this.SUBRULE(this.expr);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(ELSE);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(ENDIF);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(BYTE);
+          this.SUBRULE(this.arg_list);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(WORD);
+          this.SUBRULE(this.arg_list);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(TEXT);
+          this.SUBRULE(this.text_list);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(FILL);
+          this.SUBRULE(this.expr);
+          this.OPTION1(() => {
+            this.CONSUME(COMMA);
+            this.SUBRULE2(this.expr);
+          });
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(LIST);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(NOLIST);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(PAGE);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(EJECT);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(TITLE);
+          this.SUBRULE(this.nqstring);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(SUBTTL);
+          this.SUBRULE(this.nqstring);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(PAGESIZE);
+          this.SUBRULE(this.expr);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(BYTESPERLINE);
+          this.SUBRULE(this.expr);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(PRINT);
+          this.SUBRULE(this.nqstring);
+        },
+      },
     ]);
   });
 
-  public title = this.RULE("title", () => {
-    this.CONSUME(TitleDirective);
-    this.SUBRULE(this.nqstring);
+  public macro_args = this.RULE("macro_args", () => {
+    this.CONSUME(IDENT);
+    this.MANY(() => {
+      this.CONSUME(COMMA);
+      this.CONSUME2(IDENT);
+    });
   });
 
-  public include = this.RULE("include", () => {
-    this.CONSUME(IncludeDirective);
-    this.SUBRULE(this.nqstring);
-  });
-
-  public org = this.RULE("org", () => {
-    this.CONSUME(OrgDirective);
+  public assignment = this.RULE("assignment", () => {
+    this.CONSUME(IDENT);
+    this.OR([
+      {
+        ALT: () => {
+          this.CONSUME(ASSIGN);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(SET);
+        },
+      },
+    ]);
     this.SUBRULE(this.expr);
   });
 
-  public subttl = this.RULE("subttl", () => {
-    this.CONSUME(SubttlDirective);
-    this.SUBRULE(this.nqstring);
+  public arg_list = this.RULE("arg_list", () => {
+    this.SUBRULE(this.arg);
+    this.MANY(() => {
+      this.CONSUME(COMMA);
+      this.SUBRULE2(this.arg);
+    });
   });
 
-  public nqstring = this.RULE("nqstring", () => {
+  public arg = this.RULE("arg", () => {
     this.OR([
-      { ALT: () => this.CONSUME(Qstring) },
-      { ALT: () => this.CONSUME(Words) },
+      {
+        ALT: () => {
+          this.CONSUME(REG_A);
+        },
+      },
+      {
+        ALT: () => {
+          this.SUBRULE(this.expr);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(LPAREN);
+          this.SUBRULE(this.expr);
+          this.CONSUME(RPAREN);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(LPAREN);
+          this.SUBRULE2(this.expr);
+          this.CONSUME(COMMA);
+          this.CONSUME(REG_X);
+          this.CONSUME(RPAREN);
+        },
+      },
+      {
+        ALT: () => {
+          this.CONSUME(LPAREN);
+          this.SUBRULE3(this.expr);
+          this.CONSUME(COMMA);
+          this.CONSUME(REG_Y);
+          this.CONSUME(RPAREN);
+        },
+      },
+      {
+        ALT: () => {
+          this.SUBRULE4(this.expr);
+          this.CONSUME(COMMA);
+          this.CONSUME2(REG_X);
+        },
+      },
+      {
+        ALT: () => {
+          this.SUBRULE5(this.expr);
+          this.CONSUME(COMMA);
+          this.CONSUME2(REG_Y);
+        },
+      },
+    ]);
+  });
+
+  public text_list = this.RULE("text_list", () => {
+    this.SUBRULE(this.text_string);
+    this.MANY(() => {
+      this.CONSUME(COMMA);
+      this.SUBRULE2(this.text_string);
+    });
+  });
+
+  public text_string = this.RULE("text_string", () => {
+    this.OR([
+      { ALT: () => this.CONSUME(STRING) },
+      { ALT: () => this.SUBRULE(this.expr) },
     ]);
   });
 
@@ -225,10 +483,11 @@ export class Ma6Parser extends CstParser {
       },
     ]);
   });
+
   public primary_expr = this.RULE("primary_expr", () => {
     this.OR([
       { ALT: () => this.SUBRULE(this.number) },
-      { ALT: () => this.CONSUME(STRING) },
+      { ALT: () => this.CONSUME(CHAR) },
       { ALT: () => this.CONSUME(IDENT) },
       { ALT: () => this.CONSUME(STAR) },
       {
@@ -243,10 +502,21 @@ export class Ma6Parser extends CstParser {
 
   public number = this.RULE("number", () => {
     this.OR([
-      { ALT: () => this.CONSUME(HEXNUM) },
       { ALT: () => this.CONSUME(DECNUM) },
+      { ALT: () => this.CONSUME(HEXNUM) },
       { ALT: () => this.CONSUME(OCTNUM) },
       { ALT: () => this.CONSUME(BINNUM) },
+    ]);
+  });
+
+  public operation = this.RULE("opcode", () => {
+    this.CONSUME(Unimplemented);
+  });
+
+  public nqstring = this.RULE("nqstring", () => {
+    this.OR([
+      { ALT: () => this.CONSUME(Qstring) },
+      { ALT: () => this.CONSUME(Words) },
     ]);
   });
 }
