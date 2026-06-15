@@ -19,6 +19,7 @@ export interface ParseResult {
   errors: string[];
   input: string;
   line: number;
+  tokens: any[]; // Include tokens in result
 }
 
 export interface ParserOptions {
@@ -50,12 +51,13 @@ export function parseAssemblyLine(
   const parser = createParser();
   const useLexer = options.lexer || lexer;
   const errors: string[] = [];
+  const tokens: any[] = []; // Collect tokens here
 
   try {
     useLexer.reset(input);
-
     let token = useLexer.next();
     while (token) {
+      if (token.type !== "WS") tokens.push(token); // Save the token
       try {
         // @ts-ignore: Moo tokens are compatible with Nearley feed method at runtime
         parser.feed(token);
@@ -71,12 +73,13 @@ export function parseAssemblyLine(
 
     if (results.length === 0) {
       errors.push(`No valid parse for: "${input}"`);
-      return { ast: null, errors, input, line: 1 };
+      return { ast: null, errors, input, line: 1, tokens };
     }
 
     // Return first (most likely) parse result
     return {
       ast: results[0],
+      tokens, // Include tokens in result
       errors,
       input,
       line: 1,
@@ -89,7 +92,7 @@ export function parseAssemblyLine(
       throw err;
     }
 
-    return { ast: null, errors, input, line: 1 };
+    return { ast: null, errors, input, line: 1, tokens };
   }
 }
 
