@@ -8,11 +8,11 @@
  *   3. Parse: const result = parseAssemblyLine(input)
  */
 
-import { lexer } from "./ma6-lexer-moo.js";
+import lexer from "./ma6-lexer-moo.js";
 import grammar from "./generated/ma6-parser-generated.js";
 import moo from "moo";
-import nearley, { Grammar } from "nearley";
-const { Parser } = nearley;
+import nearley from "nearley";
+const { Parser, Grammar } = nearley;
 
 export interface ParseResult {
   ast: any;
@@ -33,7 +33,6 @@ function createParser(): InstanceType<typeof Parser> {
   // @ts-ignore: Nearley grammar has `any` type
   const parser = new Parser(Grammar.fromCompiled(grammar), {
     keepHistory: true,
-    lexer: undefined,
   });
   return parser;
 }
