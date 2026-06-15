@@ -1,11 +1,9 @@
-// @ts-nocheck
 // Generated automatically by nearley, version 2.20.1
 // http://github.com/Hardmath123/nearley
-var grammar;
+import type { CompiledRules } from "nearley";
+var grammar: CompiledRules;
 (function () {
   function id(x) { return x[0]; }
-
-// @ts-nocheck: Auto-generated file - ignoring type errors
 grammar = {
     Lexer: undefined,
     ParserRules: [

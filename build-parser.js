@@ -8,16 +8,10 @@ execSync("nearleyc src/ma6.ne -o src/generated/ma6-parser-generated.ts", {
   stdio: "inherit",
 });
 
-// Post-process: Add @ts-nocheck and convert to ESM
+// Post-process: Convert to ESM
 console.log("Post-processing generated parser...");
 const generatedFile = "src/generated/ma6-parser-generated.ts";
 let content = readFileSync(generatedFile, "utf8");
-
-// Add @ts-nocheck directive at the very top
-if (!content.startsWith("// @ts-nocheck")) {
-  content = `// @ts-nocheck\n${content}`;
-  console.log("✓ Added @ts-nocheck directive");
-}
 
 // Restructure IIFE to make grammar accessible at module level FIRST (before other replacements)
 // This ensures we work with the original structure
@@ -25,7 +19,10 @@ if (!content.startsWith("// @ts-nocheck")) {
 // To:     var grammar; (function () { grammar = {...}; ... })();
 content = content.replace(
   /\(function \(\) \{\s*function id/,
-  "var grammar;\n(function () {\n  function id",
+  `import type { CompiledRules } from "nearley";
+var grammar: CompiledRules;
+(function () {
+  function id`,
 );
 content = content.replace(/^(\s*)var grammar = \{/m, "$1grammar = {");
 

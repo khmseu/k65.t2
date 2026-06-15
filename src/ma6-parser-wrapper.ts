@@ -9,7 +9,6 @@
  */
 
 import { lexer } from "./ma6-lexer-moo.js";
-// @ts-ignore: Nearley grammar has `any` type
 import grammar from "./generated/ma6-parser-generated.js";
 import moo from "moo";
 import nearley, { Grammar } from "nearley";
