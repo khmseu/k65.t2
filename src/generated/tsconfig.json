@@ -5,8 +5,12 @@
         "composite": true,
         "module": "nodenext",
         "target": "esnext",
-        "lib": ["esnext"],
-        "types": ["node"],
+        "lib": [
+            "esnext"
+        ],
+        "types": [
+            "node"
+        ],
         "sourceMap": true,
         "declaration": true,
         "declarationMap": true,
@@ -20,6 +24,8 @@
         "noUnusedLocals": false,
         "noUnusedParameters": false
     },
-    "include": ["*.ts"],
+    "include": [
+        "*.ts"
+    ],
     "exclude": []
 }
