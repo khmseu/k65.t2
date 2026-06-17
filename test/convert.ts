@@ -460,6 +460,8 @@ export function convertMacro10ToK65(content: string): string {
       current = current.replace(/\bSTADY\s+([^;\s]+)(.*)/, "STA ($1),Y$2");
       current = current.replace(/\bCMPDY\s+([^;\s]+)(.*)/, "CMP ($1),Y$2");
       current = current.replace(/\bSBCDY\s+([^;\s]+)(.*)/, "SBC ($1),Y$2");
+      current = current.replace(/\bADCDY\s+([^;\s]+)(.*)/, "ADC ($1),Y$2");
+      current = current.replace(/\bJMPD\s+([^;\s]+)(.*)/, "JMP ($1)$2");
       // TITLE / SUBTTL / PRINTX carry free-form text. The assembler's .title /
       // .subttl / .print take the rest of the line verbatim (no quoting), so
       // embedded quotes such as THE "LIST" COMMAND survive unescaped.
