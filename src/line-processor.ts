@@ -168,7 +168,7 @@ function processLinesRecursive(
               parsed.expression,
               state.symbolTable,
             );
-            
+
             // Record memoized expression value (always record, even on errors)
             if (result) {
               recordMemo(
@@ -218,7 +218,7 @@ function processLinesRecursive(
               parsed.expression,
               state.symbolTable,
             );
-            
+
             // Record memoized expression value (always record, even on errors)
             if (result) {
               recordMemo(
@@ -353,7 +353,7 @@ function parseLine(line: string): ParsedLine {
   const labelMatch = trimmed.match(/^(@?[a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)/);
   if (labelMatch && labelMatch[1]) {
     const label = labelMatch[1];
-    const rest = stripComment((labelMatch[2] || "")).trim();
+    const rest = stripComment(labelMatch[2] || "").trim();
 
     if (!rest) {
       return { type: "label", label, raw: line };
@@ -370,7 +370,7 @@ function parseLine(line: string): ParsedLine {
   if (instrMatch && instrMatch[1]) {
     const operation = instrMatch[1];
     const argsStr = stripComment((instrMatch[2] || "").trim());
-    
+
     // Smart argument splitting that respects parentheses
     const args = parseArgumentList(argsStr);
 
@@ -532,23 +532,30 @@ function encodeInstruction(
     if (mode && mode === "immediate" && operand.startsWith("#")) {
       operand = operand.substring(1);
     }
-    
+
     // For indirect modes, extract the value from parentheses
-    if (mode && (mode === "indirect" || mode === "indirectX" || mode === "indirectY")) {
+    if (
+      mode &&
+      (mode === "indirect" || mode === "indirectX" || mode === "indirectY")
+    ) {
       // Extract the value from (VALUE) or (VALUE,X) or (VALUE),Y
       // Handle both single-argument format "(VALUE),Y" and multi-argument format "(VALUE)" + "Y"
       let fullOperand = operand;
-      if (args.length >= 2 && operand.match(/^\([^)]+\)$/) && args[1]?.match(/^[XY]$/i)) {
+      if (
+        args.length >= 2 &&
+        operand.match(/^\([^)]+\)$/) &&
+        args[1]?.match(/^[XY]$/i)
+      ) {
         // Multi-argument format - operand is already the address part
         fullOperand = operand;
       }
-      
+
       const match = fullOperand.match(/^\(([^,)]+)/);
       if (match && match[1]) {
         operand = match[1];
       }
     }
-    
+
     const value = evaluateExpression(operand, state.symbolTable);
 
     if (!value.success) {
@@ -571,9 +578,21 @@ function encodeInstruction(
  * Determine addressing mode from argument list
  * Takes the mnemonic into account to properly identify relative addressing for branches
  */
-function determineAddressingMode(mnemonic: string, args: string[]): string | null {
+function determineAddressingMode(
+  mnemonic: string,
+  args: string[],
+): string | null {
   // Check for branch instructions (all use relative addressing)
-  const branchInstructions = ["BNE", "BEQ", "BCS", "BCC", "BMI", "BPL", "BVC", "BVS"];
+  const branchInstructions = [
+    "BNE",
+    "BEQ",
+    "BCS",
+    "BCC",
+    "BMI",
+    "BPL",
+    "BVC",
+    "BVS",
+  ];
   if (branchInstructions.includes(mnemonic.toUpperCase()) && args.length > 0) {
     return "relative";
   }
@@ -583,7 +602,11 @@ function determineAddressingMode(mnemonic: string, args: string[]): string | nul
   }
 
   // Handle indexed indirect modes split across arguments: (ADDR),Y or (ADDR),X
-  if (args.length >= 2 && args[0]?.match(/^\([^)]+\)$/) && args[1]?.match(/^[XY]$/i)) {
+  if (
+    args.length >= 2 &&
+    args[0]?.match(/^\([^)]+\)$/) &&
+    args[1]?.match(/^[XY]$/i)
+  ) {
     if (args[1].toUpperCase() === "X") {
       return "indirectX";
     } else if (args[1].toUpperCase() === "Y") {
@@ -623,7 +646,9 @@ function determineAddressingMode(mnemonic: string, args: string[]): string | nul
   }
 
   // Absolute or zero page: VALUE or VALUE,X or VALUE,Y
-  if (arg.match(/^[a-zA-Z_$@][a-zA-Z0-9_$@.]*|0x[0-9A-Fa-f]+|0o[0-7]+|\d+|^[\*]/)) {
+  if (
+    arg.match(/^[a-zA-Z_$@][a-zA-Z0-9_$@.]*|0x[0-9A-Fa-f]+|0o[0-7]+|\d+|^[\*]/)
+  ) {
     if (arg.match(/,X$/i)) {
       return "absoluteX"; // Could be zeropageX, but we'll let the assembler decide
     }

@@ -38,7 +38,11 @@ export function evaluateExpression(
     const tokens = tokenize(trimmed);
     const result = evaluateTokens(tokens, symbolTable);
     if (!result) {
-      return { value: 0, success: false, error: "Internal error: no result from evaluateTokens" };
+      return {
+        value: 0,
+        success: false,
+        error: "Internal error: no result from evaluateTokens",
+      };
     }
     return result;
   } catch (e) {
