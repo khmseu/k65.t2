@@ -302,6 +302,7 @@ export function convertMacro10ToK65(content) {
     const blockStack = [];
     let angleDepth = 0;
     let inBlockComment = false;
+    let blockCommentDelim = "";
     /**
      * Applies all regex-based replacements and macro argument expansions iteratively.
      */
@@ -430,19 +431,37 @@ export function convertMacro10ToK65(content) {
             outLines.push("");
             continue;
         }
-        if (!inBlockComment && line.includes("COMMEN")) {
-            // COMMENT * becomes COMMEN * after truncation to 6 chars
-            inBlockComment = true;
-            outLines.push(line.replace(/COMMEN\s*\*/, "*").trimEnd());
-            const afterCommen = line.split(/COMMEN\s*\*/)[1];
-            if (afterCommen?.includes("*"))
-                inBlockComment = false;
-            continue;
+        if (!inBlockComment) {
+            // MACRO-10 COMMENT directive: COMMENT <delim> ... <delim>
+            // The delimiter is the first non-blank character after COMMENT and the
+            // comment body runs (possibly across many lines) until that same
+            // delimiter recurs. The delimiter is arbitrary (e.g. *, %, /).
+            const commentStart = line.match(/^(\s*)COMMENT?\b\s*(\S)(.*)$/i);
+            if (commentStart) {
+                const indent = commentStart[1] ?? "";
+                blockCommentDelim = commentStart[2];
+                const rest = commentStart[3] ?? "";
+                const endIdx = rest.indexOf(blockCommentDelim);
+                if (endIdx !== -1) {
+                    // Comment opens and closes on the same line
+                    outLines.push((indent + "; " + rest.slice(0, endIdx)).trimEnd());
+                }
+                else {
+                    inBlockComment = true;
+                    outLines.push((indent + "; " + rest).trimEnd());
+                }
+                continue;
+            }
         }
         if (inBlockComment) {
-            outLines.push("* " + line.trimEnd());
-            if (line.includes("*"))
+            const endIdx = line.indexOf(blockCommentDelim);
+            if (endIdx !== -1) {
+                outLines.push(("; " + line.slice(0, endIdx)).trimEnd());
                 inBlockComment = false;
+            }
+            else {
+                outLines.push(("; " + line).trimEnd());
+            }
             continue;
         }
         let processing = true;
