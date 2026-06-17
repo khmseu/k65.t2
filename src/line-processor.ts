@@ -457,7 +457,7 @@ function encodeInstruction(
   args: string[],
 ): number[] | null {
   // Determine addressing mode from arguments
-  const mode = determineAddressingMode(args);
+  const mode = determineAddressingMode(mnemonic, args);
   if (!mode) {
     addError(
       state,
@@ -523,8 +523,15 @@ function encodeInstruction(
 
 /**
  * Determine addressing mode from argument list
+ * Takes the mnemonic into account to properly identify relative addressing for branches
  */
-function determineAddressingMode(args: string[]): string | null {
+function determineAddressingMode(mnemonic: string, args: string[]): string | null {
+  // Check for branch instructions (all use relative addressing)
+  const branchInstructions = ["BNE", "BEQ", "BCS", "BCC", "BMI", "BPL", "BVC", "BVS"];
+  if (branchInstructions.includes(mnemonic.toUpperCase()) && args.length > 0) {
+    return "relative";
+  }
+
   if (args.length === 0) {
     return "implied";
   }
@@ -557,7 +564,7 @@ function determineAddressingMode(args: string[]): string | null {
   }
 
   // Absolute or zero page: VALUE or VALUE,X or VALUE,Y
-  if (arg.match(/^[a-zA-Z_$@][a-zA-Z0-9_$@.]*|0x[0-9A-Fa-f]+|0o[0-7]+|\d+/)) {
+  if (arg.match(/^[a-zA-Z_$@][a-zA-Z0-9_$@.]*|0x[0-9A-Fa-f]+|0o[0-7]+|\d+|^[\*]/)) {
     if (arg.match(/,X$/i)) {
       return "absoluteX"; // Could be zeropageX, but we'll let the assembler decide
     }
