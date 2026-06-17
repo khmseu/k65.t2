@@ -13,6 +13,20 @@ import { ExpressionMemoStore } from "./assembler-types.js";
 import { evaluateExpression } from "./expr-evaluator.js";
 import { findOpcode } from "./6502-opcodes.js";
 
+/**
+ * Strip comments from an expression/argument string
+ * Comments start with ; and continue to end of line
+ * Also handles inline comments preceded by spaces
+ */
+function stripComment(str: string): string {
+  // Find the first semicolon (outside of quoted strings, which we don't support)
+  const commentIdx = str.indexOf(";");
+  if (commentIdx === -1) {
+    return str.trim();
+  }
+  return str.substring(0, commentIdx).trim();
+}
+
 export interface LineProcessorOptions {
   file: string;
   macros: MacroDefinition[];
@@ -291,7 +305,7 @@ function parseLine(line: string): ParsedLine {
   const labelMatch = trimmed.match(/^(@?[a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)/);
   if (labelMatch && labelMatch[1]) {
     const label = labelMatch[1];
-    const rest = (labelMatch[2] || "").trim();
+    const rest = stripComment((labelMatch[2] || "")).trim();
 
     if (!rest) {
       return { type: "label", label, raw: line };
@@ -303,10 +317,11 @@ function parseLine(line: string): ParsedLine {
   }
 
   // Check for instruction
-  const instrMatch = trimmed.match(/^([A-Z]{3})\s*(?:(.*))?$/i);
+  // Must have exactly 3 uppercase letters followed by whitespace or end of line
+  const instrMatch = trimmed.match(/^([A-Z]{3})(?:\s+(.*))?$/i);
   if (instrMatch && instrMatch[1]) {
     const operation = instrMatch[1];
-    const argsStr = (instrMatch[2] || "").trim();
+    const argsStr = stripComment((instrMatch[2] || "").trim());
     const args = argsStr
       .split(",")
       .map((a) => a.trim())
@@ -334,7 +349,7 @@ function parseDirective(line: string): ParsedLine | null {
     return {
       type: "directive",
       directive: "org",
-      expression: orgMatch[1] || "",
+      expression: stripComment(orgMatch[1] || ""),
       raw: line,
     };
   }
@@ -348,7 +363,7 @@ function parseDirective(line: string): ParsedLine | null {
       type: "directive",
       directive: "equ",
       label: equMatch[1] || "",
-      expression: equMatch[2] || "",
+      expression: stripComment(equMatch[2] || ""),
       raw: line,
     };
   }
@@ -360,7 +375,7 @@ function parseDirective(line: string): ParsedLine | null {
       type: "directive",
       directive: "set",
       label: setMatch[1] || "",
-      expression: setMatch[2] || "",
+      expression: stripComment(setMatch[2] || ""),
       raw: line,
     };
   }
@@ -371,7 +386,7 @@ function parseDirective(line: string): ParsedLine | null {
     return {
       type: "directive",
       directive: "if",
-      expression: ifMatch[1] || "",
+      expression: stripComment(ifMatch[1] || ""),
       raw: line,
     };
   }
@@ -382,7 +397,7 @@ function parseDirective(line: string): ParsedLine | null {
     return {
       type: "directive",
       directive: "repeat",
-      expression: repeatMatch[1] || "",
+      expression: stripComment(repeatMatch[1] || ""),
       raw: line,
     };
   }
@@ -391,10 +406,11 @@ function parseDirective(line: string): ParsedLine | null {
   const dataMatch = line.match(/^\.(?:byte|word)\s+(.+)$/i);
   if (dataMatch) {
     const type = line.match(/byte/i) ? "byte" : "word";
+    const argsStr = stripComment(dataMatch[1] || "");
     return {
       type: "directive",
       directive: type as "byte" | "word",
-      args: (dataMatch[1] || "").split(",").map((a) => a.trim()),
+      args: argsStr.split(",").map((a) => a.trim()),
       raw: line,
     };
   }
