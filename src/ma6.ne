@@ -129,16 +129,25 @@ directive ->
       {% () => ({ kind: "directive", name: "page" }) %}
   | %EjectDirective
       {% () => ({ kind: "directive", name: "eject" }) %}
-  | %TitleDirective %STRING
-      {% d => ({ kind: "directive", name: "title", text: d[1].value }) %}
-  | %SubttlDirective %STRING
-      {% d => ({ kind: "directive", name: "subttl", text: d[1].value }) %}
+  | %TitleDirective freeText
+      {% d => ({ kind: "directive", name: "title", text: d[1] }) %}
+  | %SubttlDirective freeText
+      {% d => ({ kind: "directive", name: "subttl", text: d[1] }) %}
   | %PageSizeDirective expr
       {% d => ({ kind: "directive", name: "pagesize", expr: d[1] }) %}
   | %BytesPerLineDirective expr
       {% d => ({ kind: "directive", name: "bytesperline", expr: d[1] }) %}
-  | %PrintDirective %STRING
-      {% d => ({ kind: "directive", name: "print", text: d[1].value }) %}
+  | %PrintDirective freeText
+      {% d => ({ kind: "directive", name: "print", text: d[1] }) %}
+
+# Free-form text tail for .title / .subttl / .print. The lexer captures the rest
+# of the line (after the directive keyword) as a single WORDS token; an empty
+# tail is allowed.
+freeText ->
+    null
+      {% () => "" %}
+  | %WORDS
+      {% d => String(d[0].value).trim() %}
 
 # Optional ", EXPR" tail shared by .align / .fill
 alignFill ->

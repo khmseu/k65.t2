@@ -219,10 +219,22 @@ function uppercaseNonComment(line) {
     return result;
 }
 function normalizeSymbolsInLine(line) {
+    // TITLE / SUBTTL / PRINTX / COMMENT carry free-form text, not symbols, so the
+    // 6-character symbol truncation must not touch their operand (it was cutting
+    // words like "COMMAND" -> "COMMAN" and "PRECISION" -> "PRECIS").
+    if (/^\s*(?:TITLE|SUBTTL|SUBTITLE|PRINTX|COMMENT)\b/i.test(line)) {
+        return line;
+    }
     let result = "";
     let inString = false;
     let stringChar = "";
     let current = "";
+    // Keywords whose operand is free-form text (a title, subtitle or message),
+    // not symbols. When one is seen we must stop normalizing the remainder of its
+    // text so words like COMMODORE / PRECISION are not truncated to 6 chars. The
+    // text runs to end of line, or to the `>` that closes an enclosing
+    // IFx <...> conditional (e.g. `IFE REALIO-3,<PRINTX COMMODORE>`).
+    const isFreeTextKeyword = (w) => /^(?:TITLE|SUBTTL|SUBTITLE|PRINTX|COMMENT)$/i.test(w);
     for (let i = 0; i < line.length; i++) {
         const ch = line[i];
         if (inString) {
@@ -256,6 +268,20 @@ function normalizeSymbolsInLine(line) {
             current += ch;
         }
         else {
+            // A free-text keyword: emit it, then copy its text verbatim up to the
+            // enclosing `>` (or end of line) without symbol normalization.
+            if (current && isFreeTextKeyword(current)) {
+                result += current;
+                current = "";
+                const gt = line.indexOf(">", i);
+                if (gt === -1) {
+                    result += line.slice(i);
+                    return result;
+                }
+                result += line.slice(i, gt);
+                i = gt - 1;
+                continue;
+            }
             // Only normalize if it looks like a symbol (not empty, and valid)
             if (current && /^[A-Za-z_%@]/.test(current[0])) {
                 result += normalizeSymbol(current);
@@ -359,8 +385,11 @@ export function convertMacro10ToK65(content) {
             current = current.replace(/\bSTADY\s+([^;\s]+)(.*)/, "STA ($1),Y$2");
             current = current.replace(/\bCMPDY\s+([^;\s]+)(.*)/, "CMP ($1),Y$2");
             current = current.replace(/\bSBCDY\s+([^;\s]+)(.*)/, "SBC ($1),Y$2");
-            current = current.replace(/^\s*TITLE\s+(.*)/, '.title "$1"');
-            current = current.replace(/^\s*SUBTTL\s+(.*)/, '.subttl "$1"');
+            // TITLE / SUBTTL / PRINTX carry free-form text. The assembler's .title /
+            // .subttl / .print take the rest of the line verbatim (no quoting), so
+            // embedded quotes such as THE "LIST" COMMAND survive unescaped.
+            current = current.replace(/^\s*TITLE\s+(.*)/, ".title $1");
+            current = current.replace(/^\s*SUBTTL\s+(.*)/, ".subttl $1");
             current = current.replace(/^(\s*)PAGE/, "$1.page");
             current = current.replace(/^(\s*)ORG\s+(.*)/, "$1.org $2");
             current = current.replace(/^(\s*)END(?:\s+\S.*)?$/, "$1.end");
@@ -368,8 +397,8 @@ export function convertMacro10ToK65(content) {
             current = current.replace(/^(\s*)EXP\s+(.*)/, "$1.word $2");
             current = current.replace(/^(\s*)SEARCH\s+(.*)/, '$1.include "$2.asm"');
             current = current.replace(/([\\@A-Za-z0-9_\$]+)\s*==\s*(.*)/, "$1 = $2");
-            current = current.replace(/\bPRINTX\s*([^\sA-Za-z0-9])(.*)\\1/g, '.print "$2"');
-            current = current.replace(/^\s*PRINTX\s+([^\/"\s>][^>]*)/, '.print "$1"');
+            current = current.replace(/\bPRINTX\s*([^\sA-Za-z0-9])(.*)\\1/g, ".print $2");
+            current = current.replace(/^\s*PRINTX\s+([^\/"\s>][^>]*)/, ".print $1");
             // Directives with optional spaces.
             // String-literal form carries text:        DC"FOO"  -> .textc "FOO"
             // Parenthesized form carries an expression/

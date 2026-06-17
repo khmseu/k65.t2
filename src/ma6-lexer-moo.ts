@@ -11,7 +11,15 @@ import moo from "moo";
 // and WS tokens are filtered out before the token stream reaches the grammar.
 // That keeps this lexer free of comment ambiguities (e.g. `*` is always the
 // location counter / multiply operator here, never a comment marker).
-export const lexer = moo.compile({
+//
+// The lexer uses two Moo states. The default `main` state tokenizes assembly
+// normally. The `.title`, `.subttl` and `.print` directives carry free-form
+// text (a page title, a subtitle, a message) rather than an expression, so
+// they switch the lexer into the `freetext` state, where the remainder of the
+// line is captured verbatim as a single WORDS token. This lets titles contain
+// arbitrary punctuation and embedded quotes without escaping.
+export const lexer = moo.states({
+  main: {
   // Directives (must come before generic identifiers)
   // Note: Moo requires non-capturing groups (?:...) instead of /i flag
   OrgDirective: /\.(?i:org)/,
@@ -38,11 +46,13 @@ export const lexer = moo.compile({
   NoListDirective: /\.(?i:nolist)/,
   PageDirective: /\.(?i:page)/,
   EjectDirective: /\.(?i:eject)/,
-  TitleDirective: /\.(?i:title)/,
-  SubttlDirective: /\.(?i:subttl)/,
+  // These three carry free-form text: switch to the `freetext` state so the
+  // rest of the line is captured verbatim (see `freetext` below).
+  TitleDirective: { match: /\.(?i:title)/, push: "freetext" },
+  SubttlDirective: { match: /\.(?i:subttl)/, push: "freetext" },
+  PrintDirective: { match: /\.(?i:print)/, push: "freetext" },
   PageSizeDirective: /\.(?i:pagesize)/,
   BytesPerLineDirective: /\.(?i:bytesperline)/,
-  PrintDirective: /\.(?i:print)/,
 
   // Comparison operators (must come before single-char operators)
   EQ: /==/,
@@ -132,6 +142,15 @@ export const lexer = moo.compile({
     // @ts-ignore: Moo type definitions conflict with RegExp
     match: /\s+/,
     lineBreaks: true,
+  },
+  },
+
+  // Free-text state for `.title` / `.subttl` / `.print`: the leading space is
+  // consumed as WS (filtered out by the wrapper), then the remainder of the
+  // line is one WORDS token, after which we pop back to `main`.
+  freetext: {
+    WS: { match: /[ \t]+/, lineBreaks: false },
+    WORDS: { match: /\S[^\n]*/, pop: 1 },
   },
 });
 
