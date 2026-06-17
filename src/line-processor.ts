@@ -10,29 +10,19 @@ import type {
   MacroDefinition,
   ParsedLine,
   ProcessorState,
+  ExprNode,
+  OperandNode,
+  TextItem,
+  StmtNode,
+  DirectiveNode,
 } from "./assembler-types.js";
 import { ExpressionMemoStore } from "./assembler-types.js";
-import { evaluateExpression } from "./expr-evaluator.js";
+import { evaluateExpression, unparseExpr } from "./expr-evaluator.js";
 import { findOpcode, getOpcodesByMnemonic } from "./6502-opcodes.js";
 import {
   parseLine as parseLineNearley,
   type LineParseResult,
-  type DirectiveNode,
 } from "./ma6-parser-wrapper.js";
-
-/**
- * Strip comments from an expression/argument string
- * Comments start with ; and run to the end of the line.
- * All parentheses must be closed before the comment; a ; always
- * terminates the operand regardless of nesting.
- */
-function stripComment(str: string): string {
-  const commentIdx = str.indexOf(";");
-  if (commentIdx === -1) {
-    return str.trim();
-  }
-  return str.substring(0, commentIdx).trim();
-}
 
 /**
  * Parse argument list while respecting parentheses
@@ -129,9 +119,9 @@ function processLinesRecursive(
     if (parsed.type === "directive" && parsed.directive) {
       switch (parsed.directive) {
         case "org":
-          if (parsed.expression) {
+          if (parsed.expr) {
             const result = evaluateExpression(
-              parsed.expression,
+              parsed.expr,
               state.symbolTable,
               state.pc,
             );
@@ -150,9 +140,9 @@ function processLinesRecursive(
 
         case "equ":
         case "set":
-          if (parsed.label && parsed.expression) {
+          if (parsed.label && parsed.expr) {
             const result = evaluateExpression(
-              parsed.expression,
+              parsed.expr,
               state.symbolTable,
               state.pc,
             );
@@ -174,9 +164,9 @@ function processLinesRecursive(
           break;
 
         case "if":
-          if (parsed.expression) {
+          if (parsed.expr) {
             const result = evaluateExpression(
-              parsed.expression,
+              parsed.expr,
               state.symbolTable,
               state.pc,
             );
@@ -188,7 +178,7 @@ function processLinesRecursive(
                 options.file,
                 lineNum,
                 "if",
-                parsed.expression,
+                unparseExpr(parsed.expr),
                 result.value,
               );
             }
@@ -225,9 +215,9 @@ function processLinesRecursive(
           break;
 
         case "repeat":
-          if (parsed.expression) {
+          if (parsed.expr) {
             const result = evaluateExpression(
-              parsed.expression,
+              parsed.expr,
               state.symbolTable,
               state.pc,
             );
@@ -239,7 +229,7 @@ function processLinesRecursive(
                 options.file,
                 lineNum,
                 "repeat",
-                parsed.expression,
+                unparseExpr(parsed.expr),
                 result.value,
               );
             }
@@ -272,10 +262,7 @@ function processLinesRecursive(
           // skipped conditional block are never registered) then skip its body.
           const endLine = findMatchingEndmacro(lines, i);
           if (parsed.label) {
-            const params = (parsed.expression || "")
-              .split(",")
-              .map((p) => p.trim())
-              .filter((p) => p && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(p));
+            const params = parsed.params ?? [];
             const bodyText = lines.slice(i + 1, endLine);
             // Later definitions override earlier ones of the same name.
             const existing = state.macros.findIndex(
@@ -304,8 +291,8 @@ function processLinesRecursive(
           break;
 
         case "include":
-          if (parsed.expression && includeDepth < maxDepth) {
-            const filename = parsed.expression.replace(/^["']|["']$/g, "");
+          if (parsed.file && includeDepth < maxDepth) {
+            const filename = parsed.file;
             // TODO: implement file loading
             addError(
               state,
@@ -318,23 +305,126 @@ function processLinesRecursive(
 
         case "byte":
         case "word":
-          if (parsed.args) {
+          if (parsed.data) {
             const byteCount = emitData(
               state,
               options.file,
               lineNum,
               line,
               parsed.directive as "byte" | "word",
-              parsed.args,
+              parsed.data,
             );
             state.pc += byteCount;
           }
           break;
 
+        case "text":
+        case "textc":
+          if (parsed.text) {
+            const byteCount = emitText(
+              state,
+              options.file,
+              lineNum,
+              line,
+              parsed.text,
+              parsed.directive === "textc",
+            );
+            state.pc += byteCount;
+          }
+          break;
+
+        case "fill": {
+          // .fill COUNT [, VALUE]  -> COUNT bytes of VALUE (default 0).
+          if (parsed.expr) {
+            const countRes = evaluateExpression(
+              parsed.expr,
+              state.symbolTable,
+              state.pc,
+            );
+            if (!countRes.success) {
+              addError(
+                state,
+                options.file,
+                lineNum,
+                `Invalid .fill count: ${countRes.error}`,
+              );
+              break;
+            }
+            const value = evalFillValue(
+              state,
+              options.file,
+              lineNum,
+              parsed.fill,
+            );
+            const byteCount = emitFill(
+              state,
+              options.file,
+              lineNum,
+              line,
+              countRes.value,
+              value,
+            );
+            state.pc += byteCount;
+          }
+          break;
+        }
+
+        case "align": {
+          // .align BOUNDARY [, VALUE]  -> pad with VALUE until pc % BOUNDARY == 0.
+          if (parsed.expr) {
+            const boundaryRes = evaluateExpression(
+              parsed.expr,
+              state.symbolTable,
+              state.pc,
+            );
+            if (!boundaryRes.success || boundaryRes.value <= 0) {
+              addError(
+                state,
+                options.file,
+                lineNum,
+                `Invalid .align boundary: ${boundaryRes.error ?? boundaryRes.value}`,
+              );
+              break;
+            }
+            const boundary = boundaryRes.value;
+            const pad = (boundary - (state.pc % boundary)) % boundary;
+            if (pad > 0) {
+              const value = evalFillValue(
+                state,
+                options.file,
+                lineNum,
+                parsed.fill,
+              );
+              const byteCount = emitFill(
+                state,
+                options.file,
+                lineNum,
+                line,
+                pad,
+                value,
+              );
+              state.pc += byteCount;
+            }
+          }
+          break;
+        }
+
         default:
-          // Other directives (list, nolist, page, title, etc.) - no-op for now
+          // Listing/formatting directives that emit no bytes (list, nolist,
+          // page, eject, title, subttl, print, pagesize, bytesperline) - no-op.
           break;
       }
+    }
+
+    // Handle parse errors: never silently drop an unparseable line.
+    if (parsed.type === "error") {
+      addError(
+        state,
+        options.file,
+        lineNum,
+        parsed.error ?? "Could not parse line",
+      );
+      continue;
     }
 
     // Handle labels
@@ -347,7 +437,7 @@ function processLinesRecursive(
     }
 
     // Handle instructions
-    if (parsed.type === "operation" && parsed.operation && parsed.args) {
+    if (parsed.type === "operation" && parsed.operation) {
       // Macro call? Expand it instead of encoding as an instruction.
       const macro = state.macros.find(
         (m) => m.name.toUpperCase() === parsed.operation!.toUpperCase(),
@@ -361,7 +451,7 @@ function processLinesRecursive(
             `Macro expansion too deep (recursive?): ${macro.name}`,
           );
         } else {
-          const expanded = expandMacro(macro, parsed.args);
+          const expanded = expandMacro(macro, parsed.args ?? []);
           processLinesRecursive(
             expanded,
             state,
@@ -373,12 +463,15 @@ function processLinesRecursive(
         continue;
       }
 
-      // Not a macro and not a known 6502 mnemonic: the legacy parser silently
-      // dropped any token that was not a real instruction (its instruction
-      // regex only matched recognized 3-letter mnemonics). The grammar is more
-      // permissive and will classify arbitrary identifiers as instructions, so
-      // mirror the legacy behavior and treat unknown mnemonics as no-ops.
+      // Not a macro and not a known 6502 mnemonic: surface it as an error
+      // rather than silently dropping the line.
       if (getOpcodesByMnemonic(parsed.operation).length === 0) {
+        addError(
+          state,
+          options.file,
+          lineNum,
+          `Unknown instruction: ${parsed.operation}`,
+        );
         continue;
       }
 
@@ -387,8 +480,7 @@ function processLinesRecursive(
         options.file,
         lineNum,
         parsed.operation,
-        parsed.args,
-        parsed.mode,
+        parsed.operand ?? null,
       );
 
       if (encoded) {
@@ -409,21 +501,17 @@ function processLinesRecursive(
  * Parse a single source line into the assembler's ParsedLine shape.
  *
  * Recognition (label / directive / assignment / instruction + addressing
- * mode) is performed by the Nearley parser (ma6-parser-wrapper). Expression,
- * operand and macro-argument *values* are taken from the original source text
- * (sliced via the parser's token offsets) and handed to the existing
- * string-based evaluator / macro expander, so numeric results are unchanged.
- *
- * Lines the grammar cannot parse fall back to the legacy regex parser, which
- * still covers a few constructs the grammar does not (e.g. multi-argument
- * macro calls).
+ * mode) AND the expression/operand structure are produced entirely by the
+ * Nearley parser (ma6-parser-wrapper). Nothing here re-parses source text:
+ * the parser's AST nodes are carried straight through to the assembler, which
+ * evaluates them. A line the grammar cannot parse becomes a ParsedLine of
+ * type "error" so the caller can report it (never silently dropped).
  */
 function parseLine(line: string): ParsedLine {
   const result = parseLineNearley(line);
 
   if (result.empty) {
-    // Distinguish blank lines from comment-only lines for parity with the
-    // legacy parser (both are no-ops downstream).
+    // Distinguish blank lines from comment-only lines (both no-ops downstream).
     const trimmed = line.trim();
     return {
       type: trimmed === "" ? "empty" : "comment",
@@ -432,8 +520,11 @@ function parseLine(line: string): ParsedLine {
   }
 
   if (!result.ast) {
-    // Parser could not recognize the line; fall back to the regex parser.
-    return parseLineRegex(line);
+    return {
+      type: "error",
+      error: result.error ?? "Could not parse line",
+      raw: line,
+    };
   }
 
   return astToParsedLine(result, line);
@@ -474,44 +565,11 @@ function sliceFrom(
   return source.slice(tok.offset).trim();
 }
 
-/** Map the parser's operand mode + mnemonic to the assembler addressing mode. */
-function resolveMode(
-  mnemonic: string,
-  arg: { mode: string } | null,
-): AddressingMode {
-  if (!arg) {
-    return "implied";
-  }
-  if (arg.mode === "accumulator") {
-    return "accumulator";
-  }
-  if (BRANCH_MNEMONICS.has(mnemonic.toUpperCase())) {
-    return "relative";
-  }
-  switch (arg.mode) {
-    case "immediate":
-      return "immediate";
-    case "indirect":
-      return "indirect";
-    case "indirectX":
-      return "indirectX";
-    case "indirectY":
-      return "indirectY";
-    case "indexedX":
-      return "absoluteX";
-    case "indexedY":
-      return "absoluteY";
-    case "absolute":
-    default:
-      return "absolute";
-  }
-}
-
 /** Convert a successful Nearley parse into the assembler's ParsedLine shape. */
 function astToParsedLine(result: LineParseResult, line: string): ParsedLine {
   const ast = result.ast!;
   const label = ast.label ?? undefined;
-  const stmt = ast.stmt;
+  const stmt = ast.stmt as StmtNode | null;
 
   // Index of the first token of the statement (after an optional `LABEL :`).
   const stmtTokenStart = ast.label ? 2 : 0;
@@ -529,120 +587,129 @@ function astToParsedLine(result: LineParseResult, line: string): ParsedLine {
 
   switch (stmt.kind) {
     case "assign": {
-      // NAME = EXPR  or  NAME .set EXPR -> treat as equ (matches legacy parser,
-      // which mapped both `=` and `.set` assignments through the equ/set path).
-      // tokens: [NAME, ASSIGN|.set, EXPR...]; expression starts at index +2.
-      const expression = sliceFrom(result, stmtTokenStart + 2);
+      // NAME = EXPR  or  NAME .set EXPR -> treat as an equ-style constant.
       return {
         ...base,
         type: "directive",
         directive: "equ",
         label: stmt.name,
-        ...(expression !== undefined ? { expression } : {}),
+        expr: stmt.value,
       };
     }
 
     case "instruction": {
-      const mnemonic = stmt.mnemonic;
-      // Operand source text begins at the token right after the mnemonic.
+      // Carry the operand AST through for encoding. The raw operand text is
+      // captured too, but ONLY for textual macro-argument substitution (a
+      // legitimate textual use); it is never re-parsed for evaluation.
       const operandText = sliceFrom(result, stmtTokenStart + 1) ?? "";
       const args = parseArgumentList(operandText);
-      const mode = resolveMode(mnemonic, stmt.arg);
       return {
         ...base,
         type: "operation",
-        operation: mnemonic,
+        operation: stmt.mnemonic,
+        operand: stmt.arg,
         args,
-        mode,
       };
     }
 
     default:
-      return directiveToParsedLine(stmt, base, result, stmtTokenStart);
+      return directiveToParsedLine(stmt, base);
   }
 }
 
-/** Map a directive AST node to a ParsedLine. */
+/** Map a directive AST node to a ParsedLine, carrying its AST payloads. */
 function directiveToParsedLine(
   stmt: DirectiveNode,
   base: Pick<ParsedLine, "label" | "raw">,
-  result: LineParseResult,
-  stmtTokenStart: number,
 ): ParsedLine {
-  // Expression source text (for directives that carry one) starts at the
-  // token right after the directive keyword.
-  const exprText = sliceFrom(result, stmtTokenStart + 1);
-
   switch (stmt.name) {
     case "org":
     case "if":
     case "elseif":
     case "repeat":
+    case "equ":
+    case "pagesize":
+    case "bytesperline":
       return {
         ...base,
         type: "directive",
         directive: stmt.name,
-        ...(exprText !== undefined ? { expression: exprText } : {}),
-      };
-
-    case "equ":
-      // `.equ EXPR` form (label, if any, supplied the name).
-      return {
-        ...base,
-        type: "directive",
-        directive: "equ",
-        ...(exprText !== undefined ? { expression: exprText } : {}),
+        ...(stmt.expr !== undefined ? { expr: stmt.expr } : {}),
       };
 
     case "macro": {
-      // .macro NAME [, PARAMS] -> legacy shape: label=NAME, expression=PARAMS.
+      // .macro NAME [, PARAMS]
       const macroName = stmt.macroName ?? base.label;
       return {
         ...base,
         type: "directive",
         directive: "macro",
         ...(macroName !== undefined ? { label: macroName } : {}),
-        ...(stmt.params && stmt.params.length > 0
-          ? { expression: stmt.params.join(",") }
-          : {}),
+        ...(stmt.params ? { params: stmt.params } : {}),
       };
     }
 
     case "byte":
-    case "word": {
-      // Re-split the source operand list the same way the legacy parser did
-      // (naive comma split) so values evaluate identically.
-      const listText = exprText ?? "";
-      const args = listText
-        .split(",")
-        .map((a) => a.trim())
-        .filter((a) => a.length > 0);
+    case "word":
       return {
         ...base,
         type: "directive",
         directive: stmt.name,
-        args,
+        ...(stmt.args ? { data: stmt.args } : {}),
       };
-    }
+
+    case "text":
+    case "textc":
+      return {
+        ...base,
+        type: "directive",
+        directive: stmt.name,
+        ...(stmt.items ? { text: stmt.items } : {}),
+      };
+
+    case "fill":
+    case "align":
+      return {
+        ...base,
+        type: "directive",
+        directive: stmt.name,
+        ...(stmt.expr !== undefined ? { expr: stmt.expr } : {}),
+        ...(stmt.fill !== undefined ? { fill: stmt.fill } : {}),
+      };
 
     case "include":
       return {
         ...base,
         type: "directive",
         directive: "include",
-        ...(stmt.file !== undefined ? { expression: stmt.file } : {}),
+        ...(stmt.file !== undefined ? { file: stmt.file } : {}),
+      };
+
+    case "title":
+    case "subttl":
+    case "print":
+      return {
+        ...base,
+        type: "directive",
+        directive: stmt.name as DirectiveType,
+        ...(stmt.text !== undefined ? { file: stmt.text } : {}),
       };
 
     case "else":
     case "endif":
     case "endmacro":
     case "endrepeat":
-      return { ...base, type: "directive", directive: stmt.name };
+    case "list":
+    case "nolist":
+    case "page":
+    case "eject":
+      return {
+        ...base,
+        type: "directive",
+        directive: stmt.name as DirectiveType,
+      };
 
     default:
-      // Directives the assembler does not act on (list, nolist, page, eject,
-      // title, subttl, print, align, fill, text, pagesize, bytesperline).
-      // The legacy parser silently ignored these (no-op), so do the same.
       return {
         ...base,
         type: "directive",
@@ -652,209 +719,57 @@ function directiveToParsedLine(
 }
 
 /**
- * Parse a single source line into components (legacy regex parser).
- * Retained as a fallback for lines the Nearley grammar cannot yet parse.
- */
-function parseLineRegex(line: string): ParsedLine {
-  const trimmed = line.trim();
-
-  // Empty or comment
-  if (!trimmed || trimmed.startsWith(";") || trimmed.startsWith("*")) {
-    return {
-      type:
-        trimmed.startsWith(";") || trimmed.startsWith("*")
-          ? "comment"
-          : "empty",
-      raw: line,
-    };
-  }
-
-  // Try parsing directive
-  const directive = parseDirective(trimmed);
-  if (directive) {
-    return directive;
-  }
-
-  // Check for label
-  const labelMatch = trimmed.match(/^(@?[a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)/);
-  if (labelMatch && labelMatch[1]) {
-    const label = labelMatch[1];
-    const rest = stripComment(labelMatch[2] || "").trim();
-
-    if (!rest) {
-      return { type: "label", label, raw: line };
-    }
-
-    // Label followed by instruction or directive
-    const restParsed = parseLineRegex(rest);
-    return { ...restParsed, label };
-  }
-
-  // Check for instruction or macro call
-  // Instruction: exactly 3 uppercase letters followed by whitespace or end of line
-  const instrMatch = trimmed.match(/^([A-Z]{3})(?:\s+(.*))?$/i);
-  if (instrMatch && instrMatch[1]) {
-    const operation = instrMatch[1];
-    const argsStr = stripComment((instrMatch[2] || "").trim());
-
-    // Smart argument splitting that respects parentheses
-    const args = parseArgumentList(argsStr);
-
-    return {
-      type: "operation",
-      operation,
-      args,
-      raw: line,
-    };
-  }
-
-  // Unknown, treat as data/comment
-  return { type: "comment", raw: line };
-}
-
-/**
- * Parse a directive line
- */
-function parseDirective(line: string): ParsedLine | null {
-  // .org EXPR
-  const orgMatch = line.match(/^\.org\s+(.+)$/i);
-  if (orgMatch) {
-    return {
-      type: "directive",
-      directive: "org",
-      expression: stripComment(orgMatch[1] || ""),
-      raw: line,
-    };
-  }
-
-  // .equ NAME EXPR or NAME = EXPR (the "=" form allows no surrounding
-  // whitespace, e.g. "REALIO=4"; "==" is a comparison, not an assignment)
-  const equMatch = line.match(
-    /^([a-zA-Z_@$][a-zA-Z0-9_@$.]*)\s*(?:\.equ\s+|=(?!=)\s*)(.+)$/i,
-  );
-  if (equMatch) {
-    return {
-      type: "directive",
-      directive: "equ",
-      label: equMatch[1] || "",
-      expression: stripComment(equMatch[2] || ""),
-      raw: line,
-    };
-  }
-
-  // .set NAME EXPR
-  const setMatch = line.match(/^\.set\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+(.+)$/i);
-  if (setMatch) {
-    return {
-      type: "directive",
-      directive: "set",
-      label: setMatch[1] || "",
-      expression: stripComment(setMatch[2] || ""),
-      raw: line,
-    };
-  }
-
-  // .if EXPR
-  const ifMatch = line.match(/^\.if\s+(.+)$/i);
-  if (ifMatch) {
-    return {
-      type: "directive",
-      directive: "if",
-      expression: stripComment(ifMatch[1] || ""),
-      raw: line,
-    };
-  }
-
-  // .repeat EXPR
-  const repeatMatch = line.match(/^\.repeat\s+(.+)$/i);
-  if (repeatMatch) {
-    return {
-      type: "directive",
-      directive: "repeat",
-      expression: stripComment(repeatMatch[1] || ""),
-      raw: line,
-    };
-  }
-
-  // .byte | .word
-  const dataMatch = line.match(/^\.(?:byte|word)\s+(.+)$/i);
-  if (dataMatch) {
-    const type = line.match(/byte/i) ? "byte" : "word";
-    const argsStr = stripComment(dataMatch[1] || "");
-    return {
-      type: "directive",
-      directive: type as "byte" | "word",
-      args: argsStr.split(",").map((a) => a.trim()),
-      raw: line,
-    };
-  }
-
-  // Single-keyword directives
-  if (line.match(/^\.endif$/i)) {
-    return { type: "directive", directive: "endif", raw: line };
-  }
-  if (line.match(/^\.endrepeat$/i)) {
-    return { type: "directive", directive: "endrepeat", raw: line };
-  }
-  if (line.match(/^\.endmacro$/i)) {
-    return { type: "directive", directive: "endmacro", raw: line };
-  }
-  if (line.match(/^\.else$/i)) {
-    return { type: "directive", directive: "else", raw: line };
-  }
-
-  // .macro NAME [, PARAMS]
-  const macroMatch = line.match(
-    /^\.macro\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:,\s*(.*))?$/i,
-  );
-  if (macroMatch && macroMatch[1]) {
-    return {
-      type: "directive",
-      directive: "macro",
-      label: macroMatch[1],
-      expression: macroMatch[2] || "",
-      raw: line,
-    };
-  }
-
-  const elseifMatch = line.match(/^\.elseif\s+(.+)$/i);
-  if (elseifMatch) {
-    return {
-      type: "directive",
-      directive: "elseif",
-      expression: elseifMatch[1] || "",
-      raw: line,
-    };
-  }
-
-  return null;
-}
-
-/**
- * Encode an instruction to machine bytes
+ * Encode an instruction to machine bytes.
+ *
+ * The operand's addressing-mode *shape* (immediate / indirect / indexed / ...)
+ * comes from the parser. The choice between zeropage and absolute forms is made
+ * here, per pass, from the evaluated operand value: when the value is known and
+ * fits in a byte and a zeropage opcode exists for the mnemonic, the zeropage
+ * form is used; otherwise the absolute form is used. Unknown/forward operands
+ * default to absolute. If the resulting (mnemonic, mode) pair has no opcode
+ * (e.g. STY abs,X), that is a hard error.
  */
 function encodeInstruction(
   state: ProcessorState,
   file: string,
   lineNum: number,
   mnemonic: string,
-  args: string[],
-  knownMode?: AddressingMode,
+  operand: OperandNode | null,
 ): number[] | null {
-  // Use the addressing mode resolved by the parser when available; otherwise
-  // fall back to deriving it from the argument strings (legacy path).
-  const mode = knownMode ?? determineAddressingMode(mnemonic, args);
-  if (!mode) {
-    addError(
-      state,
-      file,
-      lineNum,
-      `Invalid addressing mode for ${mnemonic} ${args.join(", ")}`,
-    );
-    return null;
+  const M = mnemonic.toUpperCase();
+
+  // No operand -> implied.
+  if (!operand) {
+    const opcode = findOpcode(M, "implied");
+    if (!opcode) {
+      addError(state, file, lineNum, `Unknown instruction: ${mnemonic}`);
+      return null;
+    }
+    return [opcode.opcode];
   }
 
-  const opcode = findOpcode(mnemonic, mode);
+  // Accumulator operand (e.g. "ASL A") carries no expression.
+  if (operand.mode === "accumulator") {
+    const opcode = findOpcode(M, "accumulator");
+    if (!opcode) {
+      addError(
+        state,
+        file,
+        lineNum,
+        `Unknown instruction: ${mnemonic} (accumulator)`,
+      );
+      return null;
+    }
+    return [opcode.opcode];
+  }
+
+  const evalRes = operand.expr
+    ? evaluateExpression(operand.expr, state.symbolTable, state.pc)
+    : { value: 0, success: false, error: "Missing operand expression" };
+
+  const mode = selectMode(M, operand.mode, evalRes.success, evalRes.value);
+
+  const opcode = findOpcode(M, mode);
   if (!opcode) {
     addError(
       state,
@@ -867,54 +782,14 @@ function encodeInstruction(
 
   const bytes: number[] = [opcode.opcode];
 
-  // Add operand bytes
-  if (opcode.bytes > 1 && args.length > 0) {
-    let operand = args[0];
-    if (!operand) {
-      addError(state, file, lineNum, `Missing operand for ${mnemonic}`);
+  if (opcode.bytes > 1) {
+    if (!evalRes.success) {
+      addError(state, file, lineNum, `Invalid operand: ${evalRes.error}`);
       return null;
     }
-
-    // For immediate mode, strip the # prefix before evaluation
-    if (mode && mode === "immediate" && operand.startsWith("#")) {
-      operand = operand.substring(1);
-    }
-
-    // For indirect modes, extract the value from parentheses
-    if (
-      mode &&
-      (mode === "indirect" || mode === "indirectX" || mode === "indirectY")
-    ) {
-      // Extract the value from (VALUE) or (VALUE,X) or (VALUE),Y
-      // Handle both single-argument format "(VALUE),Y" and multi-argument format "(VALUE)" + "Y"
-      let fullOperand = operand;
-      if (
-        args.length >= 2 &&
-        operand.match(/^\([^)]+\)$/) &&
-        args[1]?.match(/^[XY]$/i)
-      ) {
-        // Multi-argument format - operand is already the address part
-        fullOperand = operand;
-      }
-
-      const match = fullOperand.match(/^\(([^,)]+)/);
-      if (match && match[1]) {
-        operand = match[1];
-      }
-    }
-
-    const value = evaluateExpression(operand, state.symbolTable, state.pc);
-
-    if (!value.success) {
-      addError(state, file, lineNum, `Invalid operand: ${value.error}`);
-      return null;
-    }
-
-    if (opcode.bytes === 2) {
-      bytes.push(value.value & 0xff);
-    } else if (opcode.bytes === 3) {
-      bytes.push(value.value & 0xff);
-      bytes.push((value.value >> 8) & 0xff);
+    bytes.push(evalRes.value & 0xff);
+    if (opcode.bytes === 3) {
+      bytes.push((evalRes.value >> 8) & 0xff);
     }
   }
 
@@ -922,90 +797,50 @@ function encodeInstruction(
 }
 
 /**
- * Determine addressing mode from argument list
- * Takes the mnemonic into account to properly identify relative addressing for branches
+ * Map the parser's operand shape to a concrete 6502 addressing mode, choosing
+ * the zeropage form when the operand value is known to fit in a byte and the
+ * mnemonic has a zeropage opcode (otherwise the absolute form).
  */
-function determineAddressingMode(
+function selectMode(
   mnemonic: string,
-  args: string[],
-): string | null {
-  // Check for branch instructions (all use relative addressing)
-  const branchInstructions = [
-    "BNE",
-    "BEQ",
-    "BCS",
-    "BCC",
-    "BMI",
-    "BPL",
-    "BVC",
-    "BVS",
-  ];
-  if (branchInstructions.includes(mnemonic.toUpperCase()) && args.length > 0) {
-    return "relative";
-  }
-
-  if (args.length === 0) {
-    return "implied";
-  }
-
-  // Handle indexed indirect modes split across arguments: (ADDR),Y or (ADDR),X
-  if (
-    args.length >= 2 &&
-    args[0]?.match(/^\([^)]+\)$/) &&
-    args[1]?.match(/^[XY]$/i)
-  ) {
-    if (args[1].toUpperCase() === "X") {
-      return "indirectX";
-    } else if (args[1].toUpperCase() === "Y") {
-      return "indirectY";
-    }
-  }
-
-  const arg = args[0];
-  if (!arg) {
-    return null;
-  }
-
-  // Accumulator: A
-  if (arg.match(/^A$/i)) {
-    return "accumulator";
-  }
-
-  // Immediate: #VALUE
-  if (arg.match(/^#/)) {
-    return "immediate";
-  }
-
-  // Indirect and indexed-indirect: (VALUE), (VALUE,X), (VALUE),Y
-  if (arg.match(/^\([^)]+/)) {
-    // Check for indexed: (VALUE,X) or (VALUE),Y
-    if (arg.match(/^\([^)]+,X\)$/i)) {
-      return "indirectX";
-    }
-    if (arg.match(/^\([^)]+\),Y$/i)) {
-      return "indirectY";
-    }
-    if (arg.match(/^\([^)]+\)$/)) {
+  parserMode: OperandNode["mode"],
+  known: boolean,
+  value: number,
+): AddressingMode {
+  switch (parserMode) {
+    case "immediate":
+      return "immediate";
+    case "indirect":
       return "indirect";
-    }
-    // If we matched the opening paren but don't have a valid pattern, return null
-    return null;
+    case "indirectX":
+      return "indirectX";
+    case "indirectY":
+      return "indirectY";
+    case "indexedX":
+      return pickZeroPage(mnemonic, "zeropageX", "absoluteX", known, value);
+    case "indexedY":
+      return pickZeroPage(mnemonic, "zeropageY", "absoluteY", known, value);
+    case "absolute":
+    default:
+      if (BRANCH_MNEMONICS.has(mnemonic)) {
+        return "relative";
+      }
+      return pickZeroPage(mnemonic, "zeropage", "absolute", known, value);
   }
+}
 
-  // Absolute or zero page: VALUE or VALUE,X or VALUE,Y
-  if (
-    arg.match(/^[a-zA-Z_$@][a-zA-Z0-9_$@.]*|0x[0-9A-Fa-f]+|0o[0-7]+|\d+|^[\*]/)
-  ) {
-    if (arg.match(/,X$/i)) {
-      return "absoluteX"; // Could be zeropageX, but we'll let the assembler decide
-    }
-    if (arg.match(/,Y$/i)) {
-      return "absoluteY";
-    }
-    return "absolute"; // Could be zeropage
+/** Choose zeropage form when known & < 256 & a zeropage opcode exists. */
+function pickZeroPage(
+  mnemonic: string,
+  zp: AddressingMode,
+  abs: AddressingMode,
+  known: boolean,
+  value: number,
+): AddressingMode {
+  if (known && value >= 0 && value < 256 && findOpcode(mnemonic, zp)) {
+    return zp;
   }
-
-  return null;
+  return abs;
 }
 
 /**
@@ -1017,13 +852,12 @@ function emitData(
   lineNum: number,
   line: string,
   directive: "byte" | "word",
-  args: string[],
+  items: ExprNode[],
 ): number {
   const bytes: number[] = [];
 
-  for (const arg of args) {
-    if (!arg) continue;
-    const result = evaluateExpression(arg, state.symbolTable, state.pc);
+  for (const item of items) {
+    const result = evaluateExpression(item, state.symbolTable, state.pc);
     if (!result.success) {
       addError(state, file, lineNum, `Invalid data value: ${result.error}`);
       continue;
@@ -1036,6 +870,91 @@ function emitData(
       bytes.push((result.value >> 8) & 0xff);
     }
   }
+
+  state.generated.push({
+    sourceFile: file,
+    sourceLine: lineNum,
+    address: state.pc,
+    bytes,
+    sourceText: line,
+  });
+
+  return bytes.length;
+}
+
+/**
+ * Emit string/expression bytes for .text and .textc directives. A .textc list
+ * sets the high bit of the LAST emitted byte (a common end-of-string marker).
+ */
+function emitText(
+  state: ProcessorState,
+  file: string,
+  lineNum: number,
+  line: string,
+  items: TextItem[],
+  highBitLast: boolean,
+): number {
+  const bytes: number[] = [];
+
+  for (const item of items) {
+    if (item.t === "str") {
+      for (const ch of item.v) {
+        bytes.push(ch.charCodeAt(0) & 0xff);
+      }
+    } else {
+      const result = evaluateExpression(item.v, state.symbolTable, state.pc);
+      if (!result.success) {
+        addError(state, file, lineNum, `Invalid text value: ${result.error}`);
+        continue;
+      }
+      bytes.push(result.value & 0xff);
+    }
+  }
+
+  if (highBitLast && bytes.length > 0) {
+    bytes[bytes.length - 1] = bytes[bytes.length - 1]! | 0x80;
+  }
+
+  state.generated.push({
+    sourceFile: file,
+    sourceLine: lineNum,
+    address: state.pc,
+    bytes,
+    sourceText: line,
+  });
+
+  return bytes.length;
+}
+
+/** Evaluate an optional .fill/.align fill value (defaults to 0). */
+function evalFillValue(
+  state: ProcessorState,
+  file: string,
+  lineNum: number,
+  fill: ExprNode | null | undefined,
+): number {
+  if (!fill) {
+    return 0;
+  }
+  const result = evaluateExpression(fill, state.symbolTable, state.pc);
+  if (!result.success) {
+    addError(state, file, lineNum, `Invalid fill value: ${result.error}`);
+    return 0;
+  }
+  return result.value & 0xff;
+}
+
+/** Emit `count` copies of `value` for .fill / .align padding. */
+function emitFill(
+  state: ProcessorState,
+  file: string,
+  lineNum: number,
+  line: string,
+  count: number,
+  value: number,
+): number {
+  const n = Math.max(0, count);
+  const bytes: number[] = new Array(n).fill(value & 0xff);
 
   state.generated.push({
     sourceFile: file,

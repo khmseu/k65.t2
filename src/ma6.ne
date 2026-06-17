@@ -117,6 +117,8 @@ directive ->
       {% d => ({ kind: "directive", name: "word", args: d[1] }) %}
   | %TextDirective textList
       {% d => ({ kind: "directive", name: "text", items: d[1] }) %}
+  | %TextcDirective textList
+      {% d => ({ kind: "directive", name: "textc", items: d[1] }) %}
   | %FillDirective expr alignFill
       {% d => ({ kind: "directive", name: "fill", expr: d[1], fill: d[2] }) %}
   | %ListDirective
@@ -188,13 +190,11 @@ textItem ->
 
 expr -> orExpr {% id %}
 
-# "|" is C-style bitwise OR; "!" is the MACRO-10 inclusive-OR operator.
+# "|" is bitwise OR.
 orExpr ->
     xorExpr
       {% id %}
   | orExpr %OR_OP xorExpr
-      {% d => ({ t: "bin", op: "|", l: d[0], r: d[2] }) %}
-  | orExpr %LNOT xorExpr
       {% d => ({ t: "bin", op: "|", l: d[0], r: d[2] }) %}
 
 xorExpr ->

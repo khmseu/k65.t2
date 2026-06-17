@@ -12,7 +12,26 @@ import lexer from "./ma6-lexer-moo.js";
 import grammar from "./generated/ma6-parser-generated.js";
 import moo from "moo";
 import nearley from "nearley";
+import type {
+  ExprNode,
+  OperandNode,
+  TextItem,
+  StmtNode,
+  DirectiveNode,
+  LineAst,
+} from "./assembler-types.js";
 const { Parser, Grammar } = nearley;
+
+// Re-export the AST node types (defined in assembler-types) for consumers that
+// import them from the parser wrapper.
+export type {
+  ExprNode,
+  OperandNode,
+  TextItem,
+  StmtNode,
+  DirectiveNode,
+  LineAst,
+};
 
 export interface ParseResult {
   ast: any;
@@ -46,54 +65,9 @@ function createParser(): InstanceType<typeof Parser> {
 // single physical source line, strips the comment, filters whitespace, runs the
 // Nearley grammar, and returns a normalized AST. Control-flow handling
 // (.if/.macro/.repeat, macro expansion, passes) is the caller's responsibility.
-
-/** Expression AST node, as emitted by ma6.ne. */
-export type ExprNode =
-  | { t: "num"; v: number }
-  | { t: "sym"; name: string }
-  | { t: "pc" }
-  | { t: "bin"; op: string; l: ExprNode; r: ExprNode }
-  | { t: "un"; op: string; e: ExprNode };
-
-/** Addressing-mode operand attached to an instruction. */
-export interface OperandNode {
-  mode:
-    | "accumulator"
-    | "immediate"
-    | "indirect"
-    | "indirectX"
-    | "indirectY"
-    | "indexedX"
-    | "indexedY"
-    | "absolute";
-  expr: ExprNode | null;
-}
-
-export type TextItem = { t: "str"; v: string } | { t: "expr"; v: ExprNode };
-
-/** A parsed statement: an assignment, a directive, or an instruction. */
-export type StmtNode =
-  | { kind: "assign"; name: string; value: ExprNode }
-  | { kind: "instruction"; mnemonic: string; arg: OperandNode | null }
-  | DirectiveNode;
-
-export interface DirectiveNode {
-  kind: "directive";
-  name: string;
-  expr?: ExprNode;
-  fill?: ExprNode | null;
-  file?: string;
-  text?: string;
-  macroName?: string;
-  params?: string[];
-  args?: ExprNode[];
-  items?: TextItem[];
-}
-
-export interface LineAst {
-  label: string | null;
-  stmt: StmtNode | null;
-}
+//
+// The AST node types (ExprNode, OperandNode, TextItem, StmtNode, DirectiveNode,
+// LineAst) are defined in assembler-types.ts and re-exported above.
 
 export interface LineParseResult {
   /** Parsed AST, or null when the line is empty/comment-only or failed. */

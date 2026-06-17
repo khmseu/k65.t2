@@ -190,6 +190,7 @@ export type DirectiveType =
   | "byte"
   | "word"
   | "text"
+  | "textc"
   | "fill"
   | "align"
   | "list"
@@ -202,14 +203,91 @@ export type DirectiveType =
   | "bytesperline"
   | "print";
 
+// ============================================================================
+// PARSER AST NODES (produced by ma6.ne, consumed by the assembler)
+// ============================================================================
+
+/** Expression AST node, as emitted by ma6.ne. */
+export type ExprNode =
+  | { t: "num"; v: number }
+  | { t: "sym"; name: string }
+  | { t: "pc" }
+  | { t: "bin"; op: string; l: ExprNode; r: ExprNode }
+  | { t: "un"; op: string; e: ExprNode };
+
+/** Addressing-mode operand attached to an instruction (parser's view). */
+export interface OperandNode {
+  mode:
+    | "accumulator"
+    | "immediate"
+    | "indirect"
+    | "indirectX"
+    | "indirectY"
+    | "indexedX"
+    | "indexedY"
+    | "absolute";
+  expr: ExprNode | null;
+}
+
+/** One item of a .text / .textc list: a string literal or an expression. */
+export type TextItem = { t: "str"; v: string } | { t: "expr"; v: ExprNode };
+
+/** A directive statement node. */
+export interface DirectiveNode {
+  kind: "directive";
+  name: string;
+  expr?: ExprNode;
+  fill?: ExprNode | null;
+  file?: string;
+  text?: string;
+  macroName?: string;
+  params?: string[];
+  args?: ExprNode[];
+  items?: TextItem[];
+}
+
+/** A parsed statement: an assignment, a directive, or an instruction. */
+export type StmtNode =
+  | { kind: "assign"; name: string; value: ExprNode }
+  | { kind: "instruction"; mnemonic: string; arg: OperandNode | null }
+  | DirectiveNode;
+
+/** A fully parsed line: optional label plus optional statement. */
+export interface LineAst {
+  label: string | null;
+  stmt: StmtNode | null;
+}
+
 export interface ParsedLine {
-  type: "empty" | "comment" | "label" | "directive" | "operation" | "data";
+  type:
+    | "empty"
+    | "comment"
+    | "label"
+    | "directive"
+    | "operation"
+    | "data"
+    | "error";
   directive?: DirectiveType;
   label?: string;
-  expression?: string; // for .if, .repeat, .equ, .org
+  /** Single expression AST (.org, .if, .repeat, .equ, .set, .pagesize, ...). */
+  expr?: ExprNode;
+  /** Fill value AST (.fill / .align second operand). */
+  fill?: ExprNode | null;
+  /** Data operand ASTs (.byte / .word). */
+  data?: ExprNode[];
+  /** Text items (.text / .textc). */
+  text?: TextItem[];
+  /** Filename / literal text payload (.include / .title / .subttl / .print). */
+  file?: string;
   operation?: string; // mnemonic
-  args?: string[]; // instruction arguments
-  mode?: AddressingMode; // resolved addressing mode (when known from the parser)
+  /** Instruction operand AST (mode + expression). */
+  operand?: OperandNode | null;
+  /** Macro definition parameter names (.macro). */
+  params?: string[];
+  /** Raw positional operand text — used ONLY for textual macro expansion. */
+  args?: string[];
+  /** Parse-error message (type === "error"). */
+  error?: string;
   raw: string;
 }
 

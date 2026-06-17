@@ -29,6 +29,9 @@ export const lexer = moo.compile({
   EndIfDirective: /\.(?i:endif)/,
   ByteDirective: /\.(?i:byte)/,
   WordDirective: /\.(?i:word)/,
+  // TextcDirective must precede TextDirective so `.textc` is not lexed as
+  // `.text` followed by a stray `c`.
+  TextcDirective: /\.(?i:textc)/,
   TextDirective: /\.(?i:text)/,
   FillDirective: /\.(?i:fill)/,
   ListDirective: /\.(?i:list)/,
