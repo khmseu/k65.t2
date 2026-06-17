@@ -1352,9 +1352,9 @@ PTDORL:
 ; THE LIST OF RESERVED WORDS:
 ;
 Q=128-1
-.macro DCI, A
+.macro DCI, A1
 Q=Q+1
-	.textc "\A"
+	.textc \A1
 	.endmacro
 RESLST:
  DCI"END"
@@ -1504,9 +1504,9 @@ GOTK = Q
 
 .if (LNGERR) == 0
 Q=0-2
-.macro DCE, X
+.macro DCE, X1
 Q=Q+2
-	.textc "\X"
+	.textc \X1
 	.endmacro
 ERRTAB:
  DCE"NF"

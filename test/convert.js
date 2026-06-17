@@ -304,16 +304,30 @@ export function convertMacro10ToK65(content) {
     let inBlockComment = false;
     let blockCommentDelim = "";
     /**
+     * Rename a macro parameter whose name collides with a 6502 register (A, X, Y).
+     * The assembler treats A/X/Y as reserved register names, so a macro parameter
+     * cannot be declared with one of those names. The rename is a pure function so
+     * both the .macro declaration and the body \PARAM references derive the same
+     * emitted name; all other (non-reserved) parameter names pass through
+     * unchanged.
+     */
+    function renameParam(name) {
+        return /^[AXY]$/i.test(name) ? `${name}1` : name;
+    }
+    /**
      * Applies all regex-based replacements and macro argument expansions iteratively.
      */
     function performReplacements(text, macroArgs) {
         let current = text;
-        // Apply macro argument replacements first (only once to avoid recursion)
+        // Apply macro argument replacements first (only once to avoid recursion).
+        // The body still uses the original parameter name; substitution emits a
+        // backslash reference to the (possibly renamed) parameter.
         for (const arg of macroArgs) {
-            current = current.split(`<${arg}>`).join(`\\${arg}`);
+            const ref = renameParam(arg);
+            current = current.split(`<${arg}>`).join(`\\${ref}`);
             // Use negative lookbehind to avoid replacing inside already-replaced \...
             const argRegex = new RegExp(`(?<!\\\\)\\b${arg}\\b`, "g");
-            current = current.replace(argRegex, `\\${arg}`);
+            current = current.replace(argRegex, `\\${ref}`);
         }
         let changed = true;
         let iterations = 0;
@@ -356,11 +370,14 @@ export function convertMacro10ToK65(content) {
             current = current.replace(/([\\@A-Za-z0-9_\$]+)\s*==\s*(.*)/, "$1 = $2");
             current = current.replace(/\bPRINTX\s*([^\sA-Za-z0-9])(.*)\\1/g, '.print "$2"');
             current = current.replace(/^\s*PRINTX\s+([^\/"\s>][^>]*)/, '.print "$1"');
-            // Directives with optional spaces
+            // Directives with optional spaces.
+            // String-literal form carries text:        DC"FOO"  -> .textc "FOO"
+            // Parenthesized form carries an expression/
+            // macro-parameter reference (e.g. DC(\A)):  DC(\A)   -> .textc \A
             current = current.replace(/\bDC\s*"(.*?)"/g, '.textc "$1"');
             current = current.replace(/\bDT\s*"(.*?)"/g, '.text "$1"');
-            current = current.replace(/\bDC\s*\((.*)\)/g, '.textc "$1"');
-            current = current.replace(/\bDT\s*\((.*)\)/g, '.text "$1"');
+            current = current.replace(/\bDC\s*\((.*)\)/g, ".textc $1");
+            current = current.replace(/\bDT\s*\((.*)\)/g, ".text $1");
             current = current.replace(/\bADR\s*\((.*?)\)/g, ".word $1");
             // XWD 0o1000,number -> .byte <low byte of number>
             // XWD is a PDP-10 "skip 2 words" macro; on 6502 we just emit the low byte
@@ -488,7 +505,8 @@ export function convertMacro10ToK65(content) {
                     .split(",")
                     .map((s) => s.trim())
                     .filter((s) => s);
-                finalizeAndPush(`${match[1]}.macro ${match[2]}${args.length > 0 ? ", " + args.join(", ") : ""}`, currentArgs);
+                const declaredArgs = args.map(renameParam);
+                finalizeAndPush(`${match[1]}.macro ${match[2]}${declaredArgs.length > 0 ? ", " + declaredArgs.join(", ") : ""}`, currentArgs);
                 blockStack.push({ type: "macro", args, startDepth: angleDepth });
                 angleDepth++;
                 line = (match[1] ?? "") + (match[4] ?? "");
