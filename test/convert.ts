@@ -398,6 +398,7 @@ export function convertMacro10ToK65(content: string): string {
       current = current.replace(/^\s*SUBTTL\s+(.*)/, '.subttl "$1"');
       current = current.replace(/^(\s*)PAGE/, "$1.page");
       current = current.replace(/^(\s*)ORG\s+(.*)/, "$1.org $2");
+      current = current.replace(/^(\s*)END(?:\s+\S.*)?$/, "$1.end");
       current = current.replace(/\bBLOCK\s+(.*)/, ".fill $1");
       current = current.replace(/^(\s*)EXP\s+(.*)/, "$1.word $2");
       current = current.replace(/^(\s*)SEARCH\s+(.*)/, '$1.include "$2.asm"');
@@ -572,27 +573,60 @@ export function convertMacro10ToK65(content: string): string {
         line = (match[1] ?? "") + (match[4] ?? "");
         continue;
       } else if (
-        (match = line.match(/^(\s*)(IFE|IFN|IF1|IF2)\s+(.*?),?\s*<(.*)/))
+        (match = line.match(/^(\s*)(IFE|IFN|IF1|IF2)\b\s*(.*)$/)) &&
+        (match[3] ?? "").includes("<")
       ) {
-        const cond = performReplacements(match[3] ?? "", currentArgs);
-        let outCond = match[2] === "IFE" ? `(${cond}) == 0` : `(${cond}) != 0`;
-        const minus = cond.match(/^([A-Za-z0-9_\$]+)\s*-\s*([A-Za-z0-9_\$]+)$/);
-        if (minus && minus[1] && minus[2])
-          outCond =
-            match[2] === "IFE"
-              ? `${minus[1]} == ${minus[2]}`
-              : `${minus[1]} != ${minus[2]}`;
-        if (match[2] === "IF1" || match[2] === "IF2") outCond = "1";
-        finalizeAndPush(`${match[1]}.if ${outCond}`, currentArgs);
+        const indent = match[1] ?? "";
+        const kind = match[2]!;
+        const rest = match[3] ?? "";
+        // Split condition from body, respecting nested <...> groups inside the
+        // condition expression. The body is introduced by a top-level "<";
+        // an optional top-level comma separates condition from body.
+        let depth = 0;
+        let commaIdx = -1;
+        let firstLt = -1;
+        let bodyOpenIdx = -1;
+        for (let k = 0; k < rest.length; k++) {
+          const ch = rest[k];
+          if (ch === "<") {
+            if (depth === 0) {
+              if (firstLt < 0) firstLt = k;
+              if (commaIdx >= 0) {
+                bodyOpenIdx = k;
+                break;
+              }
+            }
+            depth++;
+          } else if (ch === ">") {
+            depth--;
+          } else if (ch === "," && depth === 0 && commaIdx < 0) {
+            commaIdx = k;
+          }
+        }
+        if (bodyOpenIdx < 0) bodyOpenIdx = firstLt;
+        const condRaw = commaIdx >= 0 ? rest.slice(0, commaIdx) : "";
+        // Convert angle-bracket grouping in the condition to parentheses.
+        const cond = performReplacements(
+          condRaw.replace(/</g, "(").replace(/>/g, ")").trim(),
+          currentArgs,
+        );
+        let outCond = "";
+        if (kind === "IF1" || kind === "IF2" || !cond) {
+          outCond = "1";
+        } else {
+          outCond = kind === "IFE" ? `(${cond}) == 0` : `(${cond}) != 0`;
+          const minus = cond.match(/^([A-Za-z0-9_$]+)\s*-\s*([A-Za-z0-9_$]+)$/);
+          if (minus && minus[1] && minus[2])
+            outCond =
+              kind === "IFE"
+                ? `${minus[1]} == ${minus[2]}`
+                : `${minus[1]} != ${minus[2]}`;
+        }
+        finalizeAndPush(`${indent}.if ${outCond}`, currentArgs);
         blockStack.push({ type: "if", args: [], startDepth: angleDepth });
         angleDepth++;
-        line = (match[1] ?? "") + (match[4] ?? "");
-        continue;
-      } else if ((match = line.match(/^(\s*)(IFE|IFN|IF1|IF2)\s*,?\s*<(.*)/))) {
-        finalizeAndPush(`${match[1]}.if 1`, currentArgs);
-        blockStack.push({ type: "if", args: [], startDepth: angleDepth });
-        angleDepth++;
-        line = (match[1] ?? "") + (match[3] ?? "");
+        // Remaining body content follows the body-opening "<".
+        line = indent + rest.slice(bodyOpenIdx + 1);
         continue;
       } else if ((match = line.match(/^(\s*)REPEAT\s+(.*?),?\s*<(.*)/))) {
         const count = performReplacements(match[2] ?? "", currentArgs);
