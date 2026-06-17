@@ -16,15 +16,23 @@ import { findOpcode } from "./6502-opcodes.js";
 /**
  * Strip comments from an expression/argument string
  * Comments start with ; and continue to end of line
- * Also handles inline comments preceded by spaces
+ * IMPORTANT: Only treat ; as comment if not inside parentheses
+ * This allows comments inside operands like: STA (LOWTR ;comment),Y
  */
 function stripComment(str: string): string {
-  // Find the first semicolon (outside of quoted strings, which we don't support)
-  const commentIdx = str.indexOf(";");
-  if (commentIdx === -1) {
-    return str.trim();
+  let parenDepth = 0;
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i]!;
+    if (c === "(") {
+      parenDepth++;
+    } else if (c === ")") {
+      parenDepth--;
+    } else if (c === ";" && parenDepth === 0) {
+      // Found comment marker outside parentheses
+      return str.substring(0, i).trim();
+    }
   }
-  return str.substring(0, commentIdx).trim();
+  return str.trim();
 }
 
 /**
@@ -552,7 +560,7 @@ function encodeInstruction(
 
       const match = fullOperand.match(/^\(([^,)]+)/);
       if (match && match[1]) {
-        operand = match[1];
+        operand = stripComment(match[1]); // Strip comments from extracted operand
       }
     }
 
