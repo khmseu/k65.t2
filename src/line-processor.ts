@@ -75,81 +75,6 @@ function parseArgumentList(argsStr: string): string[] {
   return args;
 }
 
-/**
- * Expand macro calls in a line
- * Replaces \PARAM references with actual argument values
- */
-function expandMacroCall(
-  macro: MacroDefinition,
-  args: string[],
-  sourceLines: string[],
-): string[] {
-  // Build parameter map
-  const paramMap = new Map<string, string>();
-  for (let i = 0; i < macro.params.length && i < args.length; i++) {
-    paramMap.set(macro.params[i]!, args[i]!);
-  }
-
-  // Expand macro body lines
-  const expandedLines: string[] = [];
-  for (const bodyLineIdx of macro.bodyLines) {
-    const bodyLine = sourceLines[bodyLineIdx];
-    if (!bodyLine) continue;
-
-    // Replace \PARAM references with argument values
-    let expandedLine = bodyLine;
-    for (const [param, value] of paramMap) {
-      // Replace \PARAM with the argument value
-      expandedLine = expandedLine.replace(
-        new RegExp(`\\\\${param}\\b`, "g"),
-        value,
-      );
-    }
-
-    expandedLines.push(expandedLine);
-  }
-
-  return expandedLines;
-}
-
-/**
- * Check if an operation is a macro call and if so, expand it
- * Returns: either the original line or expanded macro lines
- */
-function tryExpandMacro(
-  trimmed: string,
-  macros: MacroDefinition[],
-  sourceLines: string[],
-): string[] | null {
-  // Try to match operation with arguments
-  // Macro calls look like: MACRONAME arg1, arg2, ...
-  // Operation can be multiple letters (unlike instructions which are 3)
-  const match = trimmed.match(
-    /^([A-Za-z_][A-Za-z0-9_]*)\s+(.*)$/,
-  );
-  if (!match || !match[1]) {
-    return null;
-  }
-
-  const opName = match[1]!.toUpperCase();
-  const argStr = (match[2] || "").trim();
-
-  // Find macro with this name
-  const macro = macros.find((m) => m.name.toUpperCase() === opName);
-  if (!macro) {
-    return null;
-  }
-
-  // Parse arguments (simple comma-split for macro args)
-  const args = argStr
-    .split(",")
-    .map((a) => a.trim())
-    .filter((a) => a && a.length > 0);
-
-  // Expand the macro
-  return expandMacroCall(macro, args, sourceLines);
-}
-
 export interface LineProcessorOptions {
   file: string;
   macros: MacroDefinition[];
@@ -391,49 +316,25 @@ function processLinesRecursive(
       });
     }
 
-    // Handle macro calls and instructions
-    if (parsed.type === "operation" && parsed.operation) {
-      // First, check if this might be a macro call (operation with arguments)
-      // For macro calls, the operation might be longer than 3 letters
-      if (parsed.operation.length > 3 || (parsed.operation.length > 0 && options.macros.length > 0)) {
-        const trimmed = line.trim();
-        const expandedLines = tryExpandMacro(trimmed, options.macros, lines);
-        
-        if (expandedLines && expandedLines.length > 0) {
-          // Process expanded macro lines recursively
-          for (const expandedLine of expandedLines) {
-            // Create a temporary line array with just this line
-            processLinesRecursive(
-              [expandedLine],
-              state,
-              options,
-              includeDepth
-            );
-          }
-          continue;
-        }
-      }
+    // Handle instructions
+    if (parsed.type === "operation" && parsed.operation && parsed.args) {
+      const encoded = encodeInstruction(
+        state,
+        options.file,
+        lineNum,
+        parsed.operation,
+        parsed.args,
+      );
 
-      // Handle as regular instruction
-      if (parsed.args) {
-        const encoded = encodeInstruction(
-          state,
-          options.file,
-          lineNum,
-          parsed.operation,
-          parsed.args,
-        );
-
-        if (encoded) {
-          state.generated.push({
-            sourceFile: options.file,
-            sourceLine: lineNum,
-            address: state.pc,
-            bytes: encoded,
-            sourceText: line,
-          });
-          state.pc += encoded.length;
-        }
+      if (encoded) {
+        state.generated.push({
+          sourceFile: options.file,
+          sourceLine: lineNum,
+          address: state.pc,
+          bytes: encoded,
+          sourceText: line,
+        });
+        state.pc += encoded.length;
       }
     }
   }
