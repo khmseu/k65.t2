@@ -366,6 +366,9 @@ export function convertMacro10ToK65(content: string): string {
     while (changed && iterations < 10) {
       let start = current;
       current = current.replace(/\^O([0-7]+)/g, "0o$1");
+      // MACRO-10 radix prefixes: ^D = decimal, ^B = binary
+      current = current.replace(/\^D([0-9]+)/g, "$1");
+      current = current.replace(/\^B([01]+)/g, "0b$1");
       current = current.replace(
         /(^|[^A-Za-z0-9_.])\.(\=|[^A-Za-z0-9_.]|$)/g,
         "$1*$2",

@@ -267,7 +267,11 @@ class Evaluator {
 
   private parseOr(): number {
     let left = this.parseXor();
-    while (this.peek()?.type === "operator" && this.peek()?.value === "|") {
+    // "|" is C-style bitwise OR; "!" is the MACRO-10 inclusive-OR operator.
+    while (
+      this.peek()?.type === "operator" &&
+      (this.peek()?.value === "|" || this.peek()?.value === "!")
+    ) {
       this.consume();
       const right = this.parseXor();
       left = left | right;
