@@ -92,7 +92,7 @@ function tokenize(expr: string): Token[] {
     }
 
     // Single-char operators
-    if ("+-*/%&|^<>!~".includes(c)) {
+    if ("+-*/%&|^<>!~=".includes(c)) {
       tokens.push({ type: "operator", value: c });
       i++;
       continue;
@@ -267,13 +267,13 @@ class Evaluator {
         !peekToken ||
         peekToken.type !== "operator" ||
         typeof peekToken.value !== "string" ||
-        !["==", "!=", "<>"].includes(peekToken.value)
+        !["==", "!=", "<>", "="].includes(peekToken.value)
       ) {
         break;
       }
       const op = this.consume()!.value as string;
       const right = this.parseRelational();
-      if (op === "==") {
+      if (op === "==" || op === "=") {
         left = left === right ? 1 : 0;
       } else if (op === "!=" || op === "<>") {
         left = left !== right ? 1 : 0;
