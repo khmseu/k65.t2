@@ -86,8 +86,8 @@ export function processPass(
     symbolTable: state.symbolTable.clone(),
     memos: new ExpressionMemoStore(),
     pc: 0,
-    errors: [...state.errors],
-    warnings: [...state.warnings],
+    errors: [],
+    warnings: [],
     generated: [],
   };
 

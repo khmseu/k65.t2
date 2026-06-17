@@ -53,35 +53,22 @@ export function assemble(
   while (passNum < maxPasses && !converged) {
     passNum++;
 
-    // Save state for convergence check
-    const prevMemos = state.memos.clone();
+    // Save label addresses for convergence check
     const prevSymbols = collectLabelAddresses(state.symbolTable);
 
-    // Run assembly pass
+    // Run assembly pass (each pass starts with a fresh error list so that
+    // forward references resolved in later passes clear earlier errors)
     state = processPass(lines, state, {
       file,
       macros: scanResult.macros,
       maxIncludeDepth: 10,
     });
 
-    // Check for expression value changes (error condition)
-    const memoComparison = prevMemos.compare(state.memos);
-    if (memoComparison.changed) {
-      for (const detail of memoComparison.details) {
-        state.errors.push({
-          file,
-          line: 0,
-          message: `Expression value changed between passes (non-convergent code): ${detail}`,
-          type: "error",
-        });
-      }
-      // Don't stop, but mark as failed to converge
-      break;
-    }
-
-    // Check for label address changes (continue if changed, else converged)
+    // Convergence is driven purely by label-address stability. We require at
+    // least two passes so forward references (labels defined later in the
+    // file) have a chance to populate the symbol table before being used.
     const newSymbols = collectLabelAddresses(state.symbolTable);
-    if (addressesEqual(prevSymbols, newSymbols)) {
+    if (passNum > 1 && addressesEqual(prevSymbols, newSymbols)) {
       converged = true;
     }
   }
