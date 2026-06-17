@@ -308,11 +308,61 @@ function normalizeSymbolsInLine(line) {
  * emit as data.
  */
 const MNEMONICS_6502 = new Set([
-    "LDA", "LDX", "LDY", "STA", "STX", "STY", "ADC", "SBC", "CMP", "CPX", "CPY",
-    "AND", "ORA", "EOR", "ASL", "LSR", "ROL", "ROR", "BIT", "INC", "DEC", "INX",
-    "DEX", "INY", "DEY", "BEQ", "BNE", "BCC", "BCS", "BMI", "BPL", "BVC", "BVS",
-    "JMP", "JSR", "RTS", "RTI", "BRK", "NOP", "CLC", "SEC", "CLD", "SED", "CLI",
-    "SEI", "CLV", "TAX", "TXA", "TAY", "TYA", "TSX", "TXS", "PHA", "PLA", "PHP",
+    "LDA",
+    "LDX",
+    "LDY",
+    "STA",
+    "STX",
+    "STY",
+    "ADC",
+    "SBC",
+    "CMP",
+    "CPX",
+    "CPY",
+    "AND",
+    "ORA",
+    "EOR",
+    "ASL",
+    "LSR",
+    "ROL",
+    "ROR",
+    "BIT",
+    "INC",
+    "DEC",
+    "INX",
+    "DEX",
+    "INY",
+    "DEY",
+    "BEQ",
+    "BNE",
+    "BCC",
+    "BCS",
+    "BMI",
+    "BPL",
+    "BVC",
+    "BVS",
+    "JMP",
+    "JSR",
+    "RTS",
+    "RTI",
+    "BRK",
+    "NOP",
+    "CLC",
+    "SEC",
+    "CLD",
+    "SED",
+    "CLI",
+    "SEI",
+    "CLV",
+    "TAX",
+    "TXA",
+    "TAY",
+    "TYA",
+    "TSX",
+    "TXS",
+    "PHA",
+    "PLA",
+    "PHP",
     "PLP",
 ]);
 /**
@@ -329,12 +379,40 @@ const MNEMONICS_6502 = new Set([
 export function convertMacro10ToK65(content) {
     // Two-pass approach: normalize symbols and uppercase non-comments
     let lines = content.split(/\r?\n/);
-    // Pass 1: Uppercase and normalize
-    const uppercasedLines = lines.map((line) => {
-        if (line.trim().startsWith(";") || line.trim().startsWith("*"))
-            return line;
-        return normalizeSymbolsInLine(uppercaseNonComment(line));
-    });
+    // Pass 1: Uppercase and normalize. This must be aware of MACRO-10 COMMENT
+    // blocks (`COMMENT <delim> ... <delim>`): their body is free text, not code,
+    // and crucially the closing delimiter line must survive intact. Symbol
+    // normalization rewrites a lone `%` to `@`, which would corrupt a `%`
+    // delimiter so the block never closes and the rest of the file gets swallowed
+    // as a comment. So pass COMMENT lines (opener, body, and closer) through
+    // verbatim and only normalize real code lines.
+    const uppercasedLines = [];
+    let p1InComment = false;
+    let p1Delim = "";
+    for (const line of lines) {
+        if (p1InComment) {
+            uppercasedLines.push(line);
+            if (line.includes(p1Delim))
+                p1InComment = false;
+            continue;
+        }
+        if (line.trim().startsWith(";") || line.trim().startsWith("*")) {
+            uppercasedLines.push(line);
+            continue;
+        }
+        const commentOpen = line.match(/^(\s*)COMMENT?\b\s*(\S)(.*)$/i);
+        if (commentOpen) {
+            const delim = commentOpen[2];
+            const rest = commentOpen[3] ?? "";
+            uppercasedLines.push(line);
+            if (!rest.includes(delim)) {
+                p1InComment = true;
+                p1Delim = delim;
+            }
+            continue;
+        }
+        uppercasedLines.push(normalizeSymbolsInLine(uppercaseNonComment(line)));
+    }
     // Pass 2: No alias generation - symbols are truncated to 6 chars
     lines = uppercasedLines;
     const outLines = [];
@@ -350,6 +428,13 @@ export function convertMacro10ToK65(content) {
     let angleDepth = 0;
     let inBlockComment = false;
     let blockCommentDelim = "";
+    // Current MACRO-10 radix for UNPREFIXED numbers. MACRO-10 interprets a bare
+    // number (no `^O`/`^D`/`^B` prefix) in the radix set by the most recent RADIX
+    // directive; the RADIX argument itself is always decimal. The source sets
+    // `RADIX 10` up front and switches to `RADIX 8` only inside the math package,
+    // so we default to 10 (a no-op for bare numbers) and emit `0o` prefixes for
+    // bare numbers only while radix 8 is in effect.
+    let currentRadix = 10;
     /**
      * Rename a macro parameter whose name collides with a 6502 register (A, X, Y).
      * The assembler treats A/X/Y as reserved register names, so a macro parameter
@@ -380,6 +465,22 @@ export function convertMacro10ToK65(content) {
         let iterations = 0;
         while (changed && iterations < 10) {
             let start = current;
+            // Bare-number radix handling: while RADIX 8 is in effect, an UNPREFIXED
+            // number is octal, so emit a `0o` prefix. Only numbers whose digits are
+            // all valid octal (0-7) are converted: MACRO-10 falls back to decimal for
+            // a bare number that contains a digit too large for the radix (e.g. `8`
+            // or `9` under radix 8), so those are left unprefixed. This runs before
+            // the `^O`/`^D`/`^B` conversions below so explicitly-prefixed numbers
+            // (whose digits are preceded by the prefix letter) are left untouched,
+            // and only the code portion (before any `;` comment) is rewritten so
+            // comment text such as "24 BITS" is preserved.
+            if (currentRadix === 8) {
+                const semi = current.indexOf(";");
+                const code = semi >= 0 ? current.slice(0, semi) : current;
+                const rest = semi >= 0 ? current.slice(semi) : "";
+                current =
+                    code.replace(/(?<![\w.$@^\\])[0-7]+\b/g, (d) => `0o${d}`) + rest;
+            }
             current = current.replace(/\^O([0-7]+)/g, "0o$1");
             // MACRO-10 radix prefixes: ^D = decimal, ^B = binary
             current = current.replace(/\^D([0-9]+)/g, "$1");
@@ -418,7 +519,10 @@ export function convertMacro10ToK65(content) {
             current = current.replace(/^(\s*)END(?:\s+\S.*)?$/, "$1.end");
             current = current.replace(/\bBLOCK\s+(.*)/, ".fill $1");
             current = current.replace(/^(\s*)EXP\s+(.*)/, "$1.word $2");
-            current = current.replace(/^(\s*)SEARCH\s+(.*)/, '$1.include "$2.asm"');
+            // SEARCH pulls in a MACRO-10 library; we ship a hand-written k65.t2
+            // equivalent named "<name>.lib.asm" so it is clearly a support library
+            // rather than another translated source file.
+            current = current.replace(/^(\s*)SEARCH\s+(.*)/, '$1.include "$2.lib.asm"');
             current = current.replace(/([\\@A-Za-z0-9_\$]+)\s*==\s*(.*)/, "$1 = $2");
             current = current.replace(/\bPRINTX\s*([^\sA-Za-z0-9])(.*)\\1/g, ".print $2");
             current = current.replace(/^\s*PRINTX\s+([^\/"\s>][^>]*)/, ".print $1");
@@ -512,7 +616,9 @@ export function convertMacro10ToK65(content) {
             const indent = bareMatch[1] ?? "";
             const expr = bareMatch[2] ?? "";
             const comment = bareMatch[3] ?? "";
-            const firstWord = (expr.match(/^[@A-Za-z_$][A-Za-z0-9_$]*/) ?? [""])[0].toUpperCase();
+            const firstWord = (expr.match(/^[@A-Za-z_$][A-Za-z0-9_$]*/) ?? [
+                "",
+            ])[0].toUpperCase();
             const exprNoStrings = expr.replace(/"(?:[^"\\]|\\.)*"/g, "");
             const isExpression = /^[-+*/&|^<>()~%@A-Za-z0-9_$. \t"]+$/.test(expr) &&
                 !/\s/.test(exprNoStrings);
@@ -700,8 +806,16 @@ export function convertMacro10ToK65(content) {
                 i++;
             }
             if (outLine.trim() || outLine.includes(";")) {
-                if (/^\s*(SALL|RADIX)/.test(outLine))
+                if (/^\s*(SALL|RADIX)/.test(outLine)) {
+                    // RADIX changes how subsequent unprefixed numbers are interpreted.
+                    // The argument is always decimal. We keep emitting the directive as a
+                    // comment (the assembler has no radix mode) but track the value so
+                    // performReplacements can prefix bare octal numbers.
+                    const radixMatch = outLine.match(/^\s*RADIX\s+([0-9]+)/);
+                    if (radixMatch)
+                        currentRadix = parseInt(radixMatch[1], 10);
                     outLines.push(";" + outLine.trimEnd());
+                }
                 else
                     finalizeAndPush(outLine, currentArgs);
             }
