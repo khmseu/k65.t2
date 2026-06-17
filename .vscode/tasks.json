@@ -1,17 +1,30 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"type": "npm",
-			"script": "test",
-			"group": "test",
-			"problemMatcher": [],
-			"label": "npm: test",
-			"detail": "npm run build && node dist/index.js -- test/m6502.converted.asm",
-			"presentation": {
-				"reveal": "always",
-				"focus": true
-			}
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "test",
+      "group": "test",
+      "problemMatcher": [],
+      "label": "npm: test",
+      "detail": "npm run build && node dist/index.js -- test/m6502.converted.asm",
+      "presentation": {
+        "reveal": "always",
+        "focus": true
+      }
+    },
+    {
+      "type": "npm",
+      "script": "test-converter",
+      "problemMatcher": [
+        "$tsc"
+      ],
+      "label": "npm: test-converter",
+      "detail": "npm run build && node --enable-source-maps test/converter.js",
+      "presentation": {
+        "reveal": "always",
+        "focus": true
+      }
+    }
+  ]
 }

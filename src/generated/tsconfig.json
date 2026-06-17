@@ -1,31 +1,25 @@
 {
-    "compilerOptions": {
-        "rootDir": "../",
-        "outDir": "../../dist",
-        "composite": true,
-        "module": "nodenext",
-        "target": "esnext",
-        "lib": [
-            "esnext"
-        ],
-        "types": [
-            "node"
-        ],
-        "sourceMap": true,
-        "declaration": true,
-        "declarationMap": true,
-        "strictNullChecks": true,
-        "noImplicitAny": false,
-        "strict": false,
-        "jsx": "react-jsx",
-        "verbatimModuleSyntax": true,
-        "isolatedModules": true,
-        "skipLibCheck": true,
-        "noUnusedLocals": false,
-        "noUnusedParameters": false
-    },
-    "include": [
-        "*.ts"
-    ],
-    "exclude": []
+  "compilerOptions": {
+    "rootDir": "../",
+    "outDir": "../../dist",
+    "composite": true,
+    "module": "nodenext",
+    "target": "esnext",
+    "lib": ["esnext"],
+    "types": ["node"],
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+    "strictNullChecks": true,
+    "noImplicitAny": false,
+    "strict": false,
+    "jsx": "react-jsx",
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": ["*.ts"],
+  "exclude": []
 }

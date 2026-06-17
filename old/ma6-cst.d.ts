@@ -136,7 +136,7 @@ export interface Or_exprCstNode extends CstNode {
 }
 
 export type Or_exprCstChildren = {
-  xor_expr: (Xor_exprCstNode)[];
+  xor_expr: Xor_exprCstNode[];
   OR_OP?: IToken[];
 };
 
@@ -146,7 +146,7 @@ export interface Xor_exprCstNode extends CstNode {
 }
 
 export type Xor_exprCstChildren = {
-  and_expr: (And_exprCstNode)[];
+  and_expr: And_exprCstNode[];
   XOR_OP?: IToken[];
 };
 
@@ -156,7 +156,7 @@ export interface And_exprCstNode extends CstNode {
 }
 
 export type And_exprCstChildren = {
-  equality_expr: (Equality_exprCstNode)[];
+  equality_expr: Equality_exprCstNode[];
   AND_OP?: IToken[];
 };
 
@@ -166,7 +166,7 @@ export interface Equality_exprCstNode extends CstNode {
 }
 
 export type Equality_exprCstChildren = {
-  relational_expr: (Relational_exprCstNode)[];
+  relational_expr: Relational_exprCstNode[];
   EQ?: IToken[];
   ASSIGN?: IToken[];
   NE?: IToken[];
@@ -178,7 +178,7 @@ export interface Relational_exprCstNode extends CstNode {
 }
 
 export type Relational_exprCstChildren = {
-  additive_expr: (Additive_exprCstNode)[];
+  additive_expr: Additive_exprCstNode[];
   LT?: IToken[];
   GT?: IToken[];
   LE?: IToken[];
@@ -191,7 +191,7 @@ export interface Additive_exprCstNode extends CstNode {
 }
 
 export type Additive_exprCstChildren = {
-  multiplicative_expr: (Multiplicative_exprCstNode)[];
+  multiplicative_expr: Multiplicative_exprCstNode[];
   PLUS?: IToken[];
   MINUS?: IToken[];
 };
@@ -202,7 +202,7 @@ export interface Multiplicative_exprCstNode extends CstNode {
 }
 
 export type Multiplicative_exprCstChildren = {
-  unary_expr: (Unary_exprCstNode)[];
+  unary_expr: Unary_exprCstNode[];
   STAR?: IToken[];
   DIV?: IToken[];
   MOD?: IToken[];
@@ -271,7 +271,10 @@ export interface ICstNodeVisitor<IN, OUT> extends ICstVisitor<IN, OUT> {
   equality_expr(children: Equality_exprCstChildren, param?: IN): OUT;
   relational_expr(children: Relational_exprCstChildren, param?: IN): OUT;
   additive_expr(children: Additive_exprCstChildren, param?: IN): OUT;
-  multiplicative_expr(children: Multiplicative_exprCstChildren, param?: IN): OUT;
+  multiplicative_expr(
+    children: Multiplicative_exprCstChildren,
+    param?: IN,
+  ): OUT;
   unary_expr(children: Unary_exprCstChildren, param?: IN): OUT;
   primary_expr(children: Primary_exprCstChildren, param?: IN): OUT;
   number(children: NumberCstChildren, param?: IN): OUT;
