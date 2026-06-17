@@ -471,6 +471,10 @@ export function convertMacro10ToK65(content) {
         }
         // 2. Final replacements for the remaining instruction/data
         let final = performReplacements(current, macroArgs).trimEnd();
+        // Strip a trailing comma left over from the PDP-10 accumulator separator
+        // (e.g. `ASL A,` or `LDA RESLST,Y,`). No 6502 statement ends in a comma, so
+        // a comma immediately before the end of line or a comment is junk.
+        final = final.replace(/,(\s*)(;.*)?$/, "$1$2").trimEnd();
         if (!final && !text.includes(";"))
             return;
         // 3. Standalone string literal -> .byte (single char) or .text (multi-char)
@@ -623,8 +627,14 @@ export function convertMacro10ToK65(content) {
                 if (bodyOpenIdx < 0)
                     bodyOpenIdx = firstLt;
                 const condRaw = commaIdx >= 0 ? rest.slice(0, commaIdx) : "";
-                // Convert angle-bracket grouping in the condition to parentheses.
-                const cond = performReplacements(condRaw.replace(/</g, "(").replace(/>/g, ")").trim(), currentArgs);
+                // Convert angle-bracket grouping in the condition to parentheses and
+                // MACRO-10 inclusive-OR `!` to `|` (the only `!` in a condition is the
+                // bitwise-OR operator; the `!=` we emit below is generated afterwards).
+                const cond = performReplacements(condRaw
+                    .replace(/</g, "(")
+                    .replace(/>/g, ")")
+                    .replace(/!/g, "|")
+                    .trim(), currentArgs);
                 let outCond = "";
                 if (kind === "IF1" || kind === "IF2" || !cond) {
                     outCond = "1";
