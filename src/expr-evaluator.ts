@@ -27,6 +27,7 @@ export interface EvalResult {
 export function evaluateExpression(
   expr: string,
   symbolTable: SymbolTable,
+  currentPC?: number,
 ): EvalResult {
   try {
     const trimmed = expr.trim();
@@ -35,7 +36,7 @@ export function evaluateExpression(
     }
 
     // Try to tokenize and evaluate
-    const tokens = tokenize(trimmed);
+    const tokens = tokenize(trimmed, currentPC);
     const result = evaluateTokens(tokens, symbolTable);
     if (!result) {
       return {
@@ -60,7 +61,7 @@ interface Token {
   value: string | number;
 }
 
-function tokenize(expr: string): Token[] {
+function tokenize(expr: string, currentPC?: number): Token[] {
   const tokens: Token[] = [];
   let i = 0;
 
@@ -71,6 +72,19 @@ function tokenize(expr: string): Token[] {
     if (/\s/.test(c)) {
       i++;
       continue;
+    }
+
+    // "*" as the current location counter (when a value is expected, i.e. at
+    // the start, after an operator, or after "("). Otherwise it is multiply.
+    if (c === "*") {
+      const prev = tokens[tokens.length - 1];
+      const isValuePosition =
+        !prev || prev.type === "operator" || prev.type === "lparen";
+      if (isValuePosition) {
+        tokens.push({ type: "number", value: currentPC ?? 0 });
+        i++;
+        continue;
+      }
     }
 
     // Parentheses

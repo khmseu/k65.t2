@@ -45,14 +45,17 @@ export function scanMacroBlocks(lines: string[], file: string): ScannerResult {
       const block = blockStack.pop();
       if (block && block.type === "macro" && block.name) {
         const bodyLines: number[] = [];
+        const bodyText: string[] = [];
         for (let j = block.startLine + 1; j < i; j++) {
           bodyLines.push(j);
+          bodyText.push(lines[j]!);
         }
 
         macros.push({
           name: block.name,
           params: extractMacroParams(lines[block.startLine]!),
           bodyLines,
+          bodyText,
           file,
         });
 

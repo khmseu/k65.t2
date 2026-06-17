@@ -106,6 +106,7 @@ function processLinesRecursive(
   state: ProcessorState,
   options: LineProcessorOptions,
   includeDepth: number,
+  macroDepth = 0,
 ): void {
   const maxDepth = options.maxIncludeDepth ?? 10;
 
@@ -124,6 +125,7 @@ function processLinesRecursive(
             const result = evaluateExpression(
               parsed.expression,
               state.symbolTable,
+              state.pc,
             );
             if (result.success) {
               state.pc = result.value;
@@ -144,6 +146,7 @@ function processLinesRecursive(
             const result = evaluateExpression(
               parsed.expression,
               state.symbolTable,
+              state.pc,
             );
             if (result.success) {
               state.symbolTable.set(parsed.label, {
@@ -167,6 +170,7 @@ function processLinesRecursive(
             const result = evaluateExpression(
               parsed.expression,
               state.symbolTable,
+              state.pc,
             );
 
             // Record memoized expression value (always record, even on errors)
@@ -217,6 +221,7 @@ function processLinesRecursive(
             const result = evaluateExpression(
               parsed.expression,
               state.symbolTable,
+              state.pc,
             );
 
             // Record memoized expression value (always record, even on errors)
@@ -310,6 +315,31 @@ function processLinesRecursive(
 
     // Handle instructions
     if (parsed.type === "operation" && parsed.operation && parsed.args) {
+      // Macro call? Expand it instead of encoding as an instruction.
+      const macro = options.macros.find(
+        (m) => m.name.toUpperCase() === parsed.operation!.toUpperCase(),
+      );
+      if (macro) {
+        if (macroDepth >= 50) {
+          addError(
+            state,
+            options.file,
+            lineNum,
+            `Macro expansion too deep (recursive?): ${macro.name}`,
+          );
+        } else {
+          const expanded = expandMacro(macro, parsed.args);
+          processLinesRecursive(
+            expanded,
+            state,
+            options,
+            includeDepth,
+            macroDepth + 1,
+          );
+        }
+        continue;
+      }
+
       const encoded = encodeInstruction(
         state,
         options.file,
@@ -581,7 +611,7 @@ function encodeInstruction(
       }
     }
 
-    const value = evaluateExpression(operand, state.symbolTable);
+    const value = evaluateExpression(operand, state.symbolTable, state.pc);
 
     if (!value.success) {
       addError(state, file, lineNum, `Invalid operand: ${value.error}`);
@@ -701,7 +731,7 @@ function emitData(
 
   for (const arg of args) {
     if (!arg) continue;
-    const result = evaluateExpression(arg, state.symbolTable);
+    const result = evaluateExpression(arg, state.symbolTable, state.pc);
     if (!result.success) {
       addError(state, file, lineNum, `Invalid data value: ${result.error}`);
       continue;
@@ -792,6 +822,24 @@ function findMatchingEndmacro(lines: string[], startLine: number): number {
     }
   }
   return lines.length - 1;
+}
+
+/**
+ * Expand a macro invocation: substitute each `\PARAM` in the body with the
+ * corresponding argument from the call site, returning the resulting lines.
+ */
+function expandMacro(macro: MacroDefinition, args: string[]): string[] {
+  return macro.bodyText.map((bodyLine) => {
+    let result = bodyLine;
+    macro.params.forEach((param, idx) => {
+      const arg = args[idx] ?? "";
+      result = result.replace(
+        new RegExp("\\\\" + param + "\\b", "g"),
+        arg,
+      );
+    });
+    return result;
+  });
 }
 
 function addError(

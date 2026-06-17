@@ -120,6 +120,7 @@ export interface MacroDefinition {
   name: string;
   params: string[];
   bodyLines: number[]; // indices into source lines array
+  bodyText: string[]; // actual body line text (for expansion at call sites)
   file: string;
 }
 
