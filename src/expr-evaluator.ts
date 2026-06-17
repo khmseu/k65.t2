@@ -85,6 +85,24 @@ function tokenize(expr: string): Token[] {
       continue;
     }
 
+    // String literals for ASCII characters: "X" -> ASCII value of X
+    if (c === '"') {
+      i++; // skip opening quote
+      if (i >= expr.length) {
+        throw new Error(`Unterminated string literal at position ${i - 1}`);
+      }
+      const charCode = expr.charCodeAt(i);
+      i++; // skip character
+      if (i >= expr.length || expr[i] !== '"') {
+        throw new Error(
+          `String literal must contain exactly one character at position ${i - 1}`,
+        );
+      }
+      i++; // skip closing quote
+      tokens.push({ type: "number", value: charCode });
+      continue;
+    }
+
     // Operators (two-char first)
     if (i + 1 < expr.length) {
       const twoChar = expr.slice(i, i + 2);
