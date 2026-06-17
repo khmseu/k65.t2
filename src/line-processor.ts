@@ -15,24 +15,16 @@ import { findOpcode } from "./6502-opcodes.js";
 
 /**
  * Strip comments from an expression/argument string
- * Comments start with ; and continue to end of line
- * IMPORTANT: Only treat ; as comment if not inside parentheses
- * This allows comments inside operands like: STA (LOWTR ;comment),Y
+ * Comments start with ; and run to the end of the line.
+ * All parentheses must be closed before the comment; a ; always
+ * terminates the operand regardless of nesting.
  */
 function stripComment(str: string): string {
-  let parenDepth = 0;
-  for (let i = 0; i < str.length; i++) {
-    const c = str[i]!;
-    if (c === "(") {
-      parenDepth++;
-    } else if (c === ")") {
-      parenDepth--;
-    } else if (c === ";" && parenDepth === 0) {
-      // Found comment marker outside parentheses
-      return str.substring(0, i).trim();
-    }
+  const commentIdx = str.indexOf(";");
+  if (commentIdx === -1) {
+    return str.trim();
   }
-  return str.trim();
+  return str.substring(0, commentIdx).trim();
 }
 
 /**
@@ -584,7 +576,7 @@ function encodeInstruction(
 
       const match = fullOperand.match(/^\(([^,)]+)/);
       if (match && match[1]) {
-        operand = stripComment(match[1]); // Strip comments from extracted operand
+        operand = match[1];
       }
     }
 

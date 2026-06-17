@@ -386,10 +386,10 @@ export function convertMacro10ToK65(content: string): string {
       current = current.replace(/\bLSR\s+A\b/, "LSR A");
       current = current.replace(/\bROL\s+A\b/, "ROL A");
       current = current.replace(/\bROR\s+A\b/, "ROR A");
-      current = current.replace(/\bLDADY\s+(.*)/, "LDA ($1),Y");
-      current = current.replace(/\bSTADY\s+(.*)/, "STA ($1),Y");
-      current = current.replace(/\bCMPDY\s+(.*)/, "CMP ($1),Y");
-      current = current.replace(/\bSBCDY\s+(.*)/, "SBC ($1),Y");
+      current = current.replace(/\bLDADY\s+([^;\s]+)(.*)/, "LDA ($1),Y$2");
+      current = current.replace(/\bSTADY\s+([^;\s]+)(.*)/, "STA ($1),Y$2");
+      current = current.replace(/\bCMPDY\s+([^;\s]+)(.*)/, "CMP ($1),Y$2");
+      current = current.replace(/\bSBCDY\s+([^;\s]+)(.*)/, "SBC ($1),Y$2");
       current = current.replace(/^\s*TITLE\s+(.*)/, '.title "$1"');
       current = current.replace(/^\s*SUBTTL\s+(.*)/, '.subttl "$1"');
       current = current.replace(/^(\s*)PAGE/, "$1.page");
