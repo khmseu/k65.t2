@@ -571,7 +571,15 @@ export function convertMacro10ToK65(content: string): string {
       current = current.replace(/^\s*SUBTTL\s+(.*)/, ".subttl $1");
       current = current.replace(/^(\s*)PAGE/, "$1.page");
       current = current.replace(/^(\s*)ORG\s+(.*)/, "$1.org $2");
-      current = current.replace(/^(\s*)END(?:\s+\S.*)?$/, "$1.end");
+      // MACRO-10 listing, cross-reference and housekeeping directives (XLIST,
+      // .XCREF, .CREF, PURGE, IFNDEF, END) have no k65.t2 equivalent, so emit
+      // them as comments: the original intent is preserved but they are inert.
+      // END is anchored so it never matches a label (e.g. `END:`) or an
+      // identifier that merely starts with END (e.g. `ENDCHR`).
+      current = current.replace(
+        /^(\s*)(\.?XLIST|\.?XCREF|\.?CREF|PURGE\b|IFNDEF\b|END(?=\s|$))(.*)$/,
+        "$1; $2$3",
+      );
       current = current.replace(/\bBLOCK\s+(.*)/, ".fill $1");
       current = current.replace(/^(\s*)EXP\s+(.*)/, "$1.word $2");
       // SEARCH pulls in a MACRO-10 library; we ship a hand-written k65.t2
