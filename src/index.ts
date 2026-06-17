@@ -9,7 +9,9 @@ import { exit } from "node:process";
 
 const args = process.argv.slice(2);
 if (args.length === 0) {
-  console.error("Usage: node dist/index.js <filename> [-o binary] [-l listing]");
+  console.error(
+    "Usage: node dist/index.js <filename> [-o binary] [-l listing]",
+  );
   process.exit(1);
 }
 
@@ -61,7 +63,12 @@ try {
   // The listing (hex dump + symbol table) is always useful, so write it even
   // when there were errors so it can be inspected alongside the diagnostics.
   const listing =
-    formatListing(result.listing, result.errors, result.warnings) +
+    formatListing(
+      result.listing,
+      result.errors,
+      result.warnings,
+      result.listingEvents,
+    ) +
     "\n\n" +
     formatSymbolTable(result.symbolTable);
   writeFileSync(listingPath, listing);

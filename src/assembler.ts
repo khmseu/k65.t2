@@ -46,6 +46,7 @@ export function assemble(
     warnings: [],
     generated: [],
     macros: [],
+    listingEvents: [],
   };
 
   let passNum = 0;
@@ -89,6 +90,7 @@ export function assemble(
     state.symbolTable.all(),
     state.errors,
     state.warnings,
+    state.listingEvents,
   );
 
   return {
@@ -98,6 +100,7 @@ export function assemble(
     errors: state.errors,
     warnings: state.warnings,
     passes: passNum,
+    listingEvents: state.listingEvents,
   };
 }
 

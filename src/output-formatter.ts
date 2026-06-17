@@ -7,6 +7,7 @@ import type {
   Symbol,
   GeneratedLine,
   AssemblyError,
+  ListingEvent,
 } from "./assembler-types.js";
 
 export interface FormattedOutput {
@@ -15,20 +16,31 @@ export interface FormattedOutput {
   symbolTable: string; // Symbol table dump
 }
 
+const hex2 = (n: number) => (n & 0xff).toString(16).padStart(2, "0");
+const hex4 = (n: number) =>
+  (n & 0xffff).toString(16).padStart(4, "0").toUpperCase();
+
 /**
- * Generate a formatted hex listing with addresses and source annotations
+ * Generate a formatted hex listing with addresses and source annotations.
+ *
+ * Listing-control directives (title/subttl/page/eject/pagesize/bytesperline/
+ * list/nolist/print) are replayed in source order via `events`, each tagged
+ * with the number of generated code lines that preceded it. The renderer
+ * paginates output, prints a per-page header with the running title/subtitle,
+ * wraps object bytes at the current bytes-per-line, suppresses output between
+ * `.nolist`/`.list`, and emits `.print` messages inline.
  */
 export function formatListing(
   generated: GeneratedLine[],
   errors: AssemblyError[],
   warnings: AssemblyError[],
+  events: ListingEvent[] = [],
 ): string {
   const lines: string[] = [];
 
   lines.push("=".repeat(80));
   lines.push("HEX LISTING");
   lines.push("=".repeat(80));
-  lines.push("");
 
   // Create error/warning map for quick lookup
   const errorMap = new Map<number, AssemblyError[]>();
@@ -50,29 +62,127 @@ export function formatListing(
     warningMap.get(key)!.push(warn);
   }
 
-  // Format each generated line
-  for (const gen of generated) {
-    const addr = gen.address.toString(16).padStart(4, "0").toUpperCase();
-    const bytesHex = gen.bytes
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join(" ");
-    const bytesStr = bytesHex.padEnd(24);
+  // Group listing events by the generated-line index they follow.
+  const eventsByAfter = new Map<number, ListingEvent[]>();
+  for (const ev of events) {
+    if (!eventsByAfter.has(ev.after)) {
+      eventsByAfter.set(ev.after, []);
+    }
+    eventsByAfter.get(ev.after)!.push(ev);
+  }
 
-    lines.push(`${addr}: ${bytesStr} ${gen.sourceText}`);
+  // Listing-control state, with MACRO-10-ish defaults.
+  let title = "";
+  let subttl = "";
+  let pageSize = 60; // body lines per page; 0 disables automatic paging
+  let bytesPerLine = 8; // object bytes shown per listing line
+  let listEnabled = true; // .nolist suppresses body lines until .list
+  let pageNum = 0;
+  let lineOnPage = 0;
+  let needHeader = true; // emit a page header before the next body line
+
+  const startNewPage = () => {
+    pageNum++;
+    lineOnPage = 0;
+    lines.push("");
+    lines.push(title ? `Page ${pageNum}   ${title}` : `Page ${pageNum}`);
+    if (subttl) {
+      lines.push(`          ${subttl}`);
+    }
+    lines.push("-".repeat(80));
+  };
+
+  // Emit one body line, starting a new page first if a header is pending or the
+  // current page is full. No-op while listing is disabled.
+  const emitBody = (text: string) => {
+    if (!listEnabled) {
+      return;
+    }
+    if (needHeader || (pageSize > 0 && lineOnPage >= pageSize)) {
+      startNewPage();
+      needHeader = false;
+    }
+    lines.push(text);
+    lineOnPage++;
+  };
+
+  const applyEvents = (idx: number) => {
+    const evs = eventsByAfter.get(idx);
+    if (!evs) {
+      return;
+    }
+    for (const ev of evs) {
+      switch (ev.type) {
+        case "title":
+          title = ev.text ?? "";
+          needHeader = true; // a new title starts a new page
+          break;
+        case "subttl":
+          subttl = ev.text ?? ""; // updates the running subtitle
+          break;
+        case "page":
+          needHeader = true;
+          break;
+        case "pagesize":
+          if (ev.value && ev.value > 0) {
+            pageSize = ev.value;
+          }
+          break;
+        case "bytesperline":
+          if (ev.value && ev.value > 0) {
+            bytesPerLine = ev.value;
+          }
+          break;
+        case "list":
+          listEnabled = true;
+          break;
+        case "nolist":
+          listEnabled = false;
+          break;
+        case "print":
+          // PRINTX-style message: always shown, independent of paging.
+          lines.push(`*** ${ev.text ?? ""}`);
+          break;
+      }
+    }
+  };
+
+  // Format each generated line, replaying any listing events that precede it.
+  for (let i = 0; i < generated.length; i++) {
+    applyEvents(i);
+
+    const gen = generated[i]!;
+    const width = bytesPerLine * 3; // "xx " per byte
+
+    if (gen.bytes.length === 0) {
+      emitBody(`${hex4(gen.address)}: ${"".padEnd(width)} ${gen.sourceText}`);
+    } else {
+      // Wrap object bytes at the current bytes-per-line; only the first chunk
+      // carries the source text, continuation chunks show their own address.
+      for (let off = 0; off < gen.bytes.length; off += bytesPerLine) {
+        const chunk = gen.bytes.slice(off, off + bytesPerLine);
+        const bytesHex = chunk.map(hex2).join(" ").padEnd(width);
+        const text = off === 0 ? gen.sourceText : "";
+        emitBody(`${hex4(gen.address + off)}: ${bytesHex} ${text}`);
+      }
+    }
 
     // Annotate errors and warnings
     if (errorMap.has(gen.sourceLine)) {
       for (const err of errorMap.get(gen.sourceLine)!) {
-        lines.push(`       ERROR: ${err.message}`);
+        emitBody(`       ERROR: ${err.message}`);
       }
     }
 
     if (warningMap.has(gen.sourceLine)) {
       for (const warn of warningMap.get(gen.sourceLine)!) {
-        lines.push(`       WARNING: ${warn.message}`);
+        emitBody(`       WARNING: ${warn.message}`);
       }
     }
   }
+
+  // Replay any trailing events that follow the last generated line.
+  applyEvents(generated.length);
 
   lines.push("");
   lines.push("=".repeat(80));
@@ -186,8 +296,9 @@ export function formatOutput(
   symbols: Symbol[],
   errors: AssemblyError[],
   warnings: AssemblyError[],
+  events: ListingEvent[] = [],
 ): FormattedOutput {
-  const listing = formatListing(generated, errors, warnings);
+  const listing = formatListing(generated, errors, warnings, events);
   const binary = generateBinary(generated);
   const symbolTable = formatSymbolTable(symbols);
 

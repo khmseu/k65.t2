@@ -89,6 +89,7 @@ export function processPass(
     warnings: [],
     generated: [],
     macros: [],
+    listingEvents: [],
   };
 
   processLinesRecursive(
@@ -435,9 +436,63 @@ function processLinesRecursive(
           break;
         }
 
+        case "title":
+        case "subttl":
+        case "print":
+          // Text-bearing listing directives: the free-form text rides in the
+          // `file` field (see directiveToParsedLine). A title also implies a
+          // new listing page, which the formatter derives from the event.
+          state.listingEvents.push({
+            type: parsed.directive,
+            after: state.generated.length,
+            text: parsed.file ?? "",
+          });
+          break;
+
+        case "pagesize":
+        case "bytesperline": {
+          // Sizing listing directives carry a numeric expression.
+          let value = 0;
+          if (parsed.expr) {
+            const res = evaluateExpression(
+              parsed.expr,
+              state.symbolTable,
+              state.pc,
+            );
+            if (res.success) {
+              value = res.value;
+            } else {
+              addError(
+                state,
+                options.file,
+                lineNum,
+                `Invalid .${parsed.directive} value: ${res.error}`,
+              );
+              break;
+            }
+          }
+          state.listingEvents.push({
+            type: parsed.directive,
+            after: state.generated.length,
+            value,
+          });
+          break;
+        }
+
+        case "list":
+        case "nolist":
+        case "page":
+        case "eject":
+          // Flag/page-break listing directives carry no payload. `eject` is a
+          // synonym for `page` in the formatter.
+          state.listingEvents.push({
+            type: parsed.directive === "eject" ? "page" : parsed.directive,
+            after: state.generated.length,
+          });
+          break;
+
         default:
-          // Listing/formatting directives that emit no bytes (list, nolist,
-          // page, eject, title, subttl, print, pagesize, bytesperline) - no-op.
+          // Any other no-byte directive is ignored by the assembler.
           break;
       }
     }

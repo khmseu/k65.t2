@@ -144,6 +144,7 @@ export interface ProcessorState {
   warnings: AssemblyError[];
   generated: GeneratedLine[];
   macros: MacroDefinition[]; // macros registered during the current pass
+  listingEvents: ListingEvent[]; // listing-control directives, in source order
 }
 
 export interface AssemblyError {
@@ -161,6 +162,28 @@ export interface GeneratedLine {
   sourceText: string; // original assembly line
 }
 
+/**
+ * A listing-control directive captured during assembly. `after` records how
+ * many generated code lines had been emitted when the directive was seen, so
+ * the listing formatter can interleave control actions with code in source
+ * order. Text-bearing events (title/subttl/print) carry `text`; sizing events
+ * (pagesize/bytesperline) carry `value`.
+ */
+export interface ListingEvent {
+  type:
+    | "title"
+    | "subttl"
+    | "page"
+    | "pagesize"
+    | "bytesperline"
+    | "list"
+    | "nolist"
+    | "print";
+  after: number;
+  text?: string;
+  value?: number;
+}
+
 export interface AssemblyResult {
   binary: number[]; // complete binary image
   listing: GeneratedLine[]; // hex listing with addresses
@@ -168,6 +191,7 @@ export interface AssemblyResult {
   errors: AssemblyError[];
   warnings: AssemblyError[];
   passes: number; // number of passes performed
+  listingEvents: ListingEvent[]; // listing-control directives, in source order
 }
 
 // ============================================================================
