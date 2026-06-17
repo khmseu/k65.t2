@@ -75,6 +75,81 @@ function parseArgumentList(argsStr: string): string[] {
   return args;
 }
 
+/**
+ * Expand macro calls in a line
+ * Replaces \PARAM references with actual argument values
+ */
+function expandMacroCall(
+  macro: MacroDefinition,
+  args: string[],
+  sourceLines: string[],
+): string[] {
+  // Build parameter map
+  const paramMap = new Map<string, string>();
+  for (let i = 0; i < macro.params.length && i < args.length; i++) {
+    paramMap.set(macro.params[i]!, args[i]!);
+  }
+
+  // Expand macro body lines
+  const expandedLines: string[] = [];
+  for (const bodyLineIdx of macro.bodyLines) {
+    const bodyLine = sourceLines[bodyLineIdx];
+    if (!bodyLine) continue;
+
+    // Replace \PARAM references with argument values
+    let expandedLine = bodyLine;
+    for (const [param, value] of paramMap) {
+      // Replace \PARAM with the argument value
+      expandedLine = expandedLine.replace(
+        new RegExp(`\\\\${param}\\b`, "g"),
+        value,
+      );
+    }
+
+    expandedLines.push(expandedLine);
+  }
+
+  return expandedLines;
+}
+
+/**
+ * Check if an operation is a macro call and if so, expand it
+ * Returns: either the original line or expanded macro lines
+ */
+function tryExpandMacro(
+  trimmed: string,
+  macros: MacroDefinition[],
+  sourceLines: string[],
+): string[] | null {
+  // Try to match operation with arguments
+  // Macro calls look like: MACRONAME arg1, arg2, ...
+  // Operation can be multiple letters (unlike instructions which are 3)
+  const match = trimmed.match(
+    /^([A-Za-z_][A-Za-z0-9_]*)\s+(.*)$/,
+  );
+  if (!match || !match[1]) {
+    return null;
+  }
+
+  const opName = match[1]!.toUpperCase();
+  const argStr = (match[2] || "").trim();
+
+  // Find macro with this name
+  const macro = macros.find((m) => m.name.toUpperCase() === opName);
+  if (!macro) {
+    return null;
+  }
+
+  // Parse arguments (simple comma-split for macro args)
+  const args = argStr
+    .split(",")
+    .map((a) => a.trim())
+    .filter((a) => a && a.length > 0);
+
+  // Expand the macro
+  return expandMacroCall(macro, args, sourceLines);
+}
+
 export interface LineProcessorOptions {
   file: string;
   macros: MacroDefinition[];
@@ -262,6 +337,12 @@ function processLinesRecursive(
           }
           break;
 
+        case "macro":
+          // Skip to matching endmacro
+          // Macros are expanded at call sites, not processed sequentially
+          i = findMatchingEndmacro(lines, i) - 1;
+          break;
+
         case "endrepeat":
         case "endmacro":
           // Should have been handled by containing block
@@ -310,25 +391,49 @@ function processLinesRecursive(
       });
     }
 
-    // Handle instructions
-    if (parsed.type === "operation" && parsed.operation && parsed.args) {
-      const encoded = encodeInstruction(
-        state,
-        options.file,
-        lineNum,
-        parsed.operation,
-        parsed.args,
-      );
+    // Handle macro calls and instructions
+    if (parsed.type === "operation" && parsed.operation) {
+      // First, check if this might be a macro call (operation with arguments)
+      // For macro calls, the operation might be longer than 3 letters
+      if (parsed.operation.length > 3 || (parsed.operation.length > 0 && options.macros.length > 0)) {
+        const trimmed = line.trim();
+        const expandedLines = tryExpandMacro(trimmed, options.macros, lines);
+        
+        if (expandedLines && expandedLines.length > 0) {
+          // Process expanded macro lines recursively
+          for (const expandedLine of expandedLines) {
+            // Create a temporary line array with just this line
+            processLinesRecursive(
+              [expandedLine],
+              state,
+              options,
+              includeDepth
+            );
+          }
+          continue;
+        }
+      }
 
-      if (encoded) {
-        state.generated.push({
-          sourceFile: options.file,
-          sourceLine: lineNum,
-          address: state.pc,
-          bytes: encoded,
-          sourceText: line,
-        });
-        state.pc += encoded.length;
+      // Handle as regular instruction
+      if (parsed.args) {
+        const encoded = encodeInstruction(
+          state,
+          options.file,
+          lineNum,
+          parsed.operation,
+          parsed.args,
+        );
+
+        if (encoded) {
+          state.generated.push({
+            sourceFile: options.file,
+            sourceLine: lineNum,
+            address: state.pc,
+            bytes: encoded,
+            sourceText: line,
+          });
+          state.pc += encoded.length;
+        }
       }
     }
   }
@@ -372,8 +477,8 @@ function parseLine(line: string): ParsedLine {
     return { ...restParsed, label };
   }
 
-  // Check for instruction
-  // Must have exactly 3 uppercase letters followed by whitespace or end of line
+  // Check for instruction or macro call
+  // Instruction: exactly 3 uppercase letters followed by whitespace or end of line
   const instrMatch = trimmed.match(/^([A-Z]{3})(?:\s+(.*))?$/i);
   if (instrMatch && instrMatch[1]) {
     const operation = instrMatch[1];
@@ -477,9 +582,27 @@ function parseDirective(line: string): ParsedLine | null {
   if (line.match(/^\.endrepeat$/i)) {
     return { type: "directive", directive: "endrepeat", raw: line };
   }
+  if (line.match(/^\.endmacro$/i)) {
+    return { type: "directive", directive: "endmacro", raw: line };
+  }
   if (line.match(/^\.else$/i)) {
     return { type: "directive", directive: "else", raw: line };
   }
+
+  // .macro NAME [, PARAMS]
+  const macroMatch = line.match(
+    /^\.macro\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:,\s*(.*))?$/i,
+  );
+  if (macroMatch && macroMatch[1]) {
+    return {
+      type: "directive",
+      directive: "macro",
+      label: macroMatch[1],
+      expression: macroMatch[2] || "",
+      raw: line,
+    };
+  }
+
   const elseifMatch = line.match(/^\.elseif\s+(.+)$/i);
   if (elseifMatch) {
     return {
@@ -754,6 +877,22 @@ function findMatchingEndrepeat(lines: string[], startLine: number): number {
     const line = lines[i]!.trim();
     if (line.match(/^\.repeat\s/i)) depth++;
     if (line.match(/^\.endrepeat$/i)) {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return lines.length - 1;
+}
+
+/**
+ * Find matching .endmacro for .macro at given line
+ */
+function findMatchingEndmacro(lines: string[], startLine: number): number {
+  let depth = 1;
+  for (let i = startLine + 1; i < lines.length; i++) {
+    const line = lines[i]!.trim();
+    if (line.match(/^\.macro\s/i)) depth++;
+    if (line.match(/^\.endmacro$/i)) {
       depth--;
       if (depth === 0) return i;
     }
