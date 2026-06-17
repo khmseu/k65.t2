@@ -27,6 +27,46 @@ function stripComment(str: string): string {
   return str.substring(0, commentIdx).trim();
 }
 
+/**
+ * Parse argument list while respecting parentheses
+ * For example: "(ADDR),Y" should be a single argument, not split into "(ADDR)" and "Y"
+ */
+function parseArgumentList(argsStr: string): string[] {
+  if (!argsStr) {
+    return [];
+  }
+
+  const args: string[] = [];
+  let current = "";
+  let parenDepth = 0;
+
+  for (let i = 0; i < argsStr.length; i++) {
+    const c = argsStr[i]!;
+
+    if (c === "(") {
+      parenDepth++;
+      current += c;
+    } else if (c === ")") {
+      parenDepth--;
+      current += c;
+    } else if (c === "," && parenDepth === 0) {
+      // Comma outside parentheses - this is an argument separator
+      if (current.trim()) {
+        args.push(current.trim());
+      }
+      current = "";
+    } else {
+      current += c;
+    }
+  }
+
+  if (current.trim()) {
+    args.push(current.trim());
+  }
+
+  return args;
+}
+
 export interface LineProcessorOptions {
   file: string;
   macros: MacroDefinition[];
@@ -330,10 +370,9 @@ function parseLine(line: string): ParsedLine {
   if (instrMatch && instrMatch[1]) {
     const operation = instrMatch[1];
     const argsStr = stripComment((instrMatch[2] || "").trim());
-    const args = argsStr
-      .split(",")
-      .map((a) => a.trim())
-      .filter((a) => a);
+    
+    // Smart argument splitting that respects parentheses
+    const args = parseArgumentList(argsStr);
 
     return {
       type: "operation",
@@ -497,7 +536,14 @@ function encodeInstruction(
     // For indirect modes, extract the value from parentheses
     if (mode && (mode === "indirect" || mode === "indirectX" || mode === "indirectY")) {
       // Extract the value from (VALUE) or (VALUE,X) or (VALUE),Y
-      const match = operand.match(/^\(([^,)]+)/);
+      // Handle both single-argument format "(VALUE),Y" and multi-argument format "(VALUE)" + "Y"
+      let fullOperand = operand;
+      if (args.length >= 2 && operand.match(/^\([^)]+\)$/) && args[1]?.match(/^[XY]$/i)) {
+        // Multi-argument format - operand is already the address part
+        fullOperand = operand;
+      }
+      
+      const match = fullOperand.match(/^\(([^,)]+)/);
       if (match && match[1]) {
         operand = match[1];
       }
@@ -536,6 +582,15 @@ function determineAddressingMode(mnemonic: string, args: string[]): string | nul
     return "implied";
   }
 
+  // Handle indexed indirect modes split across arguments: (ADDR),Y or (ADDR),X
+  if (args.length >= 2 && args[0]?.match(/^\([^)]+\)$/) && args[1]?.match(/^[XY]$/i)) {
+    if (args[1].toUpperCase() === "X") {
+      return "indirectX";
+    } else if (args[1].toUpperCase() === "Y") {
+      return "indirectY";
+    }
+  }
+
   const arg = args[0];
   if (!arg) {
     return null;
@@ -551,8 +606,8 @@ function determineAddressingMode(mnemonic: string, args: string[]): string | nul
     return "immediate";
   }
 
-  // Indirect: (VALUE)
-  if (arg.match(/^\([^)]+\)$/)) {
+  // Indirect and indexed-indirect: (VALUE), (VALUE,X), (VALUE),Y
+  if (arg.match(/^\([^)]+/)) {
     // Check for indexed: (VALUE,X) or (VALUE),Y
     if (arg.match(/^\([^)]+,X\)$/i)) {
       return "indirectX";
@@ -560,7 +615,11 @@ function determineAddressingMode(mnemonic: string, args: string[]): string | nul
     if (arg.match(/^\([^)]+\),Y$/i)) {
       return "indirectY";
     }
-    return "indirect";
+    if (arg.match(/^\([^)]+\)$/)) {
+      return "indirect";
+    }
+    // If we matched the opening paren but don't have a valid pattern, return null
+    return null;
   }
 
   // Absolute or zero page: VALUE or VALUE,X or VALUE,Y
