@@ -332,10 +332,10 @@ export function convertMacro10ToK65(content: string): string {
     
     // Apply macro argument replacements first (only once to avoid recursion)
     for (const arg of macroArgs) {
-      current = current.split(`<${arg}>`).join(`\${${arg}}`);
-      // Use negative lookahead/lookbehind to avoid replacing inside already-replaced ${...}
-      const argRegex = new RegExp(`(?<!\\$\\{)(?<!\\$)\\b${arg}\\b(?!\\})`, "g");
-      current = current.replace(argRegex, `\${${arg}}`);
+      current = current.split(`<${arg}>`).join(`\\${arg}`);
+      // Use negative lookbehind to avoid replacing inside already-replaced \...
+      const argRegex = new RegExp(`(?<!\\\\)\\b${arg}\\b`, "g");
+      current = current.replace(argRegex, `\\${arg}`);
     }
     
     let changed = true;

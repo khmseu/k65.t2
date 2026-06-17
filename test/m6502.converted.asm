@@ -126,9 +126,9 @@ GETCMD = 1
 	LDA #0
 	BCC	*+4
 	LDA #0o200
-	LSR	${WD}
-	ORA	${WD}
-	STA	${WD}
+	LSR	\WD
+	ORA	\WD
+	STA	\WD
 	.endmacro
 	.endif
 
@@ -137,108 +137,108 @@ GETCMD = 1
 	.byte 10
 	.endmacro
 .macro SYNCHK, Q
-	LDA #(${Q})
+	LDA #(\Q)
 	JSR	SYNCHR
 	.endmacro
 .macro DT, Q
-IRPC	${Q},(IFDIF (${Q})("),(EXP "${Q}"))
+IRPC	\Q,(IFDIF (\Q)("),(EXP "\Q"))
 .endmacro
 .macro LDWD, WD
-	LDA	${WD}
-	LDY	(${WD})+1
+	LDA	\WD
+	LDY	(\WD)+1
 	.endmacro
 .macro LDWDI, WD
-	LDA #((${WD})&0o377)
-	LDY #((${WD})/0o400)
+	LDA #((\WD)&0o377)
+	LDY #((\WD)/0o400)
 	.endmacro
 .macro LDWX, WD
-	LDA	${WD}
-	LDX	(${WD})+1
+	LDA	\WD
+	LDX	(\WD)+1
 	.endmacro
 .macro LDWXI, WD
-	LDA #((${WD})&0o377)
-	LDX #((${WD})/0o400)
+	LDA #((\WD)&0o377)
+	LDX #((\WD)/0o400)
 	.endmacro
 .macro LDXY, WD
-	LDX	${WD}
-	LDY	(${WD})+1
+	LDX	\WD
+	LDY	(\WD)+1
 	.endmacro
 .macro LDXYI, WD
-	LDX #((${WD})&0o377)
-	LDY #((${WD})/0o400)
+	LDX #((\WD)&0o377)
+	LDY #((\WD)/0o400)
 	.endmacro
 .macro STWD, WD
-	STA	${WD}
-	STY	(${WD})+1
+	STA	\WD
+	STY	(\WD)+1
 	.endmacro
 .macro STWX, WD
-	STA	${WD}
-	STX	(${WD})+1
+	STA	\WD
+	STX	(\WD)+1
 	.endmacro
 .macro STXY, WD
-	STX	${WD}
-	STY	(${WD})+1
+	STX	\WD
+	STY	(\WD)+1
 	.endmacro
 .macro CLR, WD
 	LDA #0
-	STA	${WD}
+	STA	\WD
 	.endmacro
 .macro COM, WD
-	LDA	${WD}
+	LDA	\WD
 	EOR #0o377
-	STA	${WD}
+	STA	\WD
 	.endmacro
 .macro PULWD, WD
 	PLA
-	STA	${WD}
+	STA	\WD
 	PLA
-	STA	(${WD})+1
+	STA	(\WD)+1
 	.endmacro
 .macro PSHWD, WD
-	LDA	(${WD})+1
+	LDA	(\WD)+1
 	PHA
-	LDA	${WD}
+	LDA	\WD
 	PHA
 	.endmacro
 .macro JEQ, WD
 	BNE	*+5
-	JMP	${WD}
+	JMP	\WD
 	.endmacro
 .macro JNE, WD
 	BEQ	*+5
-	JMP	${WD}
+	JMP	\WD
 	.endmacro
 .macro BCCA, Q
-	BCC	${Q}
+	BCC	\Q
 	.endmacro
 		;BRANCHES THAT ALWAYS BRANCH
 .macro BCSA, Q
-	BCS	${Q}
+	BCS	\Q
 	.endmacro
 		;THESE ARE USED ON THE 6502 BECAUSE
 .macro BEQA, Q
-	BEQ	${Q}
+	BEQ	\Q
 	.endmacro
 		;THERE IS NO UNCONDITIONAL BRANCH
 .macro BNEA, Q
-	BNE	${Q}
+	BNE	\Q
 	.endmacro
 .macro BMIA, Q
-	BMI	${Q}
+	BMI	\Q
 	.endmacro
 .macro BPLA, Q
-	BPL	${Q}
+	BPL	\Q
 	.endmacro
 .macro BVCA, Q
-	BVC	${Q}
+	BVC	\Q
 	.endmacro
 .macro BVSA, Q
-	BVS	${Q}
+	BVS	\Q
 	.endmacro
 .macro INCW, R
-	INC	${R}
+	INC	\R
 	BNE	@Q
-	INC	${R}+1
+	INC	\R+1
 @Q:
 .endmacro
 .macro SKIP1
@@ -1354,7 +1354,7 @@ PTDORL:
 Q=128-1
 .macro DCI, A
 Q=Q+1
-	.textc "${A}"
+	.textc "\A"
 	.endmacro
 RESLST:
  DCI"END"
@@ -1506,7 +1506,7 @@ GOTK = Q
 Q=0-2
 .macro DCE, X
 Q=Q+2
-	.textc "${X}"
+	.textc "\X"
 	.endmacro
 ERRTAB:
  DCE"NF"
