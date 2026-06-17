@@ -154,16 +154,30 @@ export function formatListing(
     const gen = generated[i]!;
     const width = bytesPerLine * 3; // "xx " per byte
 
+    // Overlay an info address (branch target / assigned value) onto the last
+    // four columns of a byte field of the given width.
+    const overlayInfo = (field: string): string => {
+      if (gen.infoAddress === undefined) {
+        return field;
+      }
+      const padded = field.padEnd(width);
+      return padded.slice(0, Math.max(0, width - 4)) + hex4(gen.infoAddress);
+    };
+
     if (gen.bytes.length === 0) {
-      emitBody(`${hex4(gen.address)}: ${"".padEnd(width)} ${gen.sourceText}`);
+      emitBody(
+        `${hex4(gen.address)}: ${overlayInfo("".padEnd(width))} ${gen.sourceText}`,
+      );
     } else {
       // Wrap object bytes at the current bytes-per-line; only the first chunk
       // carries the source text, continuation chunks show their own address.
+      // The info address (if any) is shown on the first chunk only.
       for (let off = 0; off < gen.bytes.length; off += bytesPerLine) {
         const chunk = gen.bytes.slice(off, off + bytesPerLine);
         const bytesHex = chunk.map(hex2).join(" ").padEnd(width);
+        const field = off === 0 ? overlayInfo(bytesHex) : bytesHex;
         const text = off === 0 ? gen.sourceText : "";
-        emitBody(`${hex4(gen.address + off)}: ${bytesHex} ${text}`);
+        emitBody(`${hex4(gen.address + off)}: ${field} ${text}`);
       }
     }
 

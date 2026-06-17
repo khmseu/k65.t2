@@ -165,6 +165,10 @@ export interface GeneratedLine {
   address: number; // assembled PC
   bytes: number[]; // machine code bytes
   sourceText: string; // original assembly line
+  // Optional address to overlay in the last four columns of the listing's byte
+  // field: the branch target for relative branches, or the assigned value for
+  // .equ/.set/= assignments.
+  infoAddress?: number;
 }
 
 /**

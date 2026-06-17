@@ -196,6 +196,8 @@ function processLinesRecursive(
                 type: "constant",
                 value: result.value,
               });
+              // Show the assigned value in the listing's byte field.
+              listingEntry.infoAddress = result.value;
             } else {
               addError(
                 state,
@@ -633,12 +635,15 @@ function processLinesRecursive(
           sourceFile: options.file,
           sourceLine: lineNum,
           address: state.pc,
-          bytes: encoded,
+          bytes: encoded.bytes,
           sourceText: line,
         });
-        listingEntry.bytes = encoded;
+        listingEntry.bytes = encoded.bytes;
         listingEntry.address = state.pc;
-        state.pc += encoded.length;
+        if (encoded.target !== undefined) {
+          listingEntry.infoAddress = encoded.target;
+        }
+        state.pc += encoded.bytes.length;
       }
     }
   }
@@ -882,7 +887,7 @@ function encodeInstruction(
   lineNum: number,
   mnemonic: string,
   operand: OperandNode | null,
-): number[] | null {
+): { bytes: number[]; target?: number } | null {
   const M = mnemonic.toUpperCase();
 
   // No operand -> implied.
@@ -892,7 +897,7 @@ function encodeInstruction(
       addError(state, file, lineNum, `Unknown instruction: ${mnemonic}`);
       return null;
     }
-    return [opcode.opcode];
+    return { bytes: [opcode.opcode] };
   }
 
   // Accumulator operand (e.g. "ASL A") carries no expression.
@@ -907,7 +912,7 @@ function encodeInstruction(
       );
       return null;
     }
-    return [opcode.opcode];
+    return { bytes: [opcode.opcode] };
   }
 
   const evalRes = operand.expr
@@ -940,7 +945,11 @@ function encodeInstruction(
     }
   }
 
-  return bytes;
+  // Relative branches carry their absolute target so the listing can show it.
+  if (mode === "relative" && evalRes.success) {
+    return { bytes, target: evalRes.value };
+  }
+  return { bytes };
 }
 
 /**
