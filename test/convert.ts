@@ -4,7 +4,21 @@ import { URL } from "node:url";
 import { parse } from "node:path";
 
 /**
- * MACRO-10 symbol semantics:
+ * MACRO-10 to k65.t Assembly Converter
+ *
+ * INPUT FORMAT: MACRO-10 (PDP-10 assembly language)
+ *   - Macro parameters referenced with backslash: \WD, \Q, etc.
+ *   - Directives: DEFINE/ENDM, IFE/IFN/ENDIF, REPEAT/ENDREPEAT
+ *   - Pseudo-ops: ORG, EQU, DC, DT, ADR, XWD, etc.
+ *   - Cheap labels with % prefix: %LABEL
+ *
+ * OUTPUT FORMAT: k65.t2 (6502 assembly language)
+ *   - Macro parameters referenced with backslash: \WD, \Q, etc.
+ *   - Directives: .macro/.endmacro, .if/.endif, .repeat/.endrepeat
+ *   - Pseudo-ops: .org, .equ, .byte, .text, .word, etc.
+ *   - Cheap labels with @ prefix: @LABEL (converted from %)
+ *
+ * SYMBOL SEMANTICS (MACRO-10):
  * - First 6 characters only (case-insensitive)
  * - Valid chars: letters, numerals, . $ %
  * - % prefix = cheap label (convert to @)
@@ -299,7 +313,15 @@ function normalizeSymbolsInLine(line: string): string {
 }
 
 /**
- * Converts MACRO-10 assembler format to k65.t format.
+ * Converts MACRO-10 assembler format to k65.t2 format.
+ *
+ * Takes MACRO-10 assembly source code (PDP-10 format) and converts it to
+ * k65.t2 assembly format (6502 assembly). Handles:
+ * - Symbol normalization (MACRO-10 6-char limit)
+ * - Macro definition and usage conversion
+ * - Directive translation (ORG → .org, etc.)
+ * - Label conversion (% prefix → @)
+ * - Expression handling (.+4 → *+4)
  */
 export function convertMacro10ToK65(content: string): string {
   // Two-pass approach: normalize symbols and uppercase non-comments
