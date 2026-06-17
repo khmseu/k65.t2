@@ -483,11 +483,26 @@ function encodeInstruction(
 
   // Add operand bytes
   if (opcode.bytes > 1 && args.length > 0) {
-    const operand = args[0];
+    let operand = args[0];
     if (!operand) {
       addError(state, file, lineNum, `Missing operand for ${mnemonic}`);
       return null;
     }
+
+    // For immediate mode, strip the # prefix before evaluation
+    if (mode && mode === "immediate" && operand.startsWith("#")) {
+      operand = operand.substring(1);
+    }
+    
+    // For indirect modes, extract the value from parentheses
+    if (mode && (mode === "indirect" || mode === "indirectX" || mode === "indirectY")) {
+      // Extract the value from (VALUE) or (VALUE,X) or (VALUE),Y
+      const match = operand.match(/^\(([^,)]+)/);
+      if (match && match[1]) {
+        operand = match[1];
+      }
+    }
+    
     const value = evaluateExpression(operand, state.symbolTable);
 
     if (!value.success) {
