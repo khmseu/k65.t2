@@ -143,6 +143,7 @@ export interface ProcessorState {
   errors: AssemblyError[];
   warnings: AssemblyError[];
   generated: GeneratedLine[];
+  macros: MacroDefinition[]; // macros registered during the current pass
 }
 
 export interface AssemblyError {

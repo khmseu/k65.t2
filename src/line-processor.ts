@@ -89,6 +89,7 @@ export function processPass(
     errors: [],
     warnings: [],
     generated: [],
+    macros: [],
   };
 
   processLinesRecursive(
@@ -259,11 +260,36 @@ function processLinesRecursive(
           }
           break;
 
-        case "macro":
-          // Skip to matching endmacro
-          // Macros are expanded at call sites, not processed sequentially
-          i = findMatchingEndmacro(lines, i) - 1;
+        case "macro": {
+          // Register the macro at its definition point (so macros inside a
+          // skipped conditional block are never registered) then skip its body.
+          const endLine = findMatchingEndmacro(lines, i);
+          if (parsed.label) {
+            const params = (parsed.expression || "")
+              .split(",")
+              .map((p) => p.trim())
+              .filter((p) => p && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(p));
+            const bodyText = lines.slice(i + 1, endLine);
+            // Later definitions override earlier ones of the same name.
+            const existing = state.macros.findIndex(
+              (m) => m.name.toUpperCase() === parsed.label!.toUpperCase(),
+            );
+            const def: MacroDefinition = {
+              name: parsed.label,
+              params,
+              bodyLines: [],
+              bodyText,
+              file: options.file,
+            };
+            if (existing >= 0) {
+              state.macros[existing] = def;
+            } else {
+              state.macros.push(def);
+            }
+          }
+          i = endLine;
           break;
+        }
 
         case "endrepeat":
         case "endmacro":
@@ -316,7 +342,7 @@ function processLinesRecursive(
     // Handle instructions
     if (parsed.type === "operation" && parsed.operation && parsed.args) {
       // Macro call? Expand it instead of encoding as an instruction.
-      const macro = options.macros.find(
+      const macro = state.macros.find(
         (m) => m.name.toUpperCase() === parsed.operation!.toUpperCase(),
       );
       if (macro) {

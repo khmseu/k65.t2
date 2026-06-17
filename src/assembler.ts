@@ -45,6 +45,7 @@ export function assemble(
     errors: [],
     warnings: [],
     generated: [],
+    macros: [],
   };
 
   let passNum = 0;
