@@ -143,6 +143,11 @@ export interface ProcessorState {
   errors: AssemblyError[];
   warnings: AssemblyError[];
   generated: GeneratedLine[];
+  // Every source line, in execution order, for the full listing. Byte-bearing
+  // lines carry their object bytes; comments, blank lines, directive-only
+  // lines, and the (skipped) bodies of macro definitions and inactive
+  // conditionals are recorded as text-only entries (empty `bytes`).
+  listing: GeneratedLine[];
   macros: MacroDefinition[]; // macros registered during the current pass
   listingEvents: ListingEvent[]; // listing-control directives, in source order
 }
@@ -164,9 +169,9 @@ export interface GeneratedLine {
 
 /**
  * A listing-control directive captured during assembly. `after` records how
- * many generated code lines had been emitted when the directive was seen, so
- * the listing formatter can interleave control actions with code in source
- * order. Text-bearing events (title/subttl/print) carry `text`; sizing events
+ * many listing lines had been emitted when the directive was seen, so the
+ * listing formatter can interleave control actions with source lines in order.
+ * Text-bearing events (title/subttl/print) carry `text`; sizing events
  * (pagesize/bytesperline) carry `value`.
  */
 export interface ListingEvent {

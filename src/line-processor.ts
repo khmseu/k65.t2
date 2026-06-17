@@ -7,6 +7,7 @@
 import type {
   AddressingMode,
   DirectiveType,
+  GeneratedLine,
   MacroDefinition,
   ParsedLine,
   ProcessorState,
@@ -88,6 +89,7 @@ export function processPass(
     errors: [],
     warnings: [],
     generated: [],
+    listing: [],
     macros: [],
     listingEvents: [],
   };
@@ -111,12 +113,51 @@ function processLinesRecursive(
 ): void {
   const maxDepth = options.maxIncludeDepth ?? 10;
 
+  // Record one or more source lines into the full listing as text-only entries
+  // (no object bytes). Used for blocks the assembler skips over but that should
+  // still appear in the listing: macro-definition bodies and inactive
+  // conditional branches.
+  const recordSkipped = (from: number, to: number) => {
+    for (let k = from; k <= to && k < lines.length; k++) {
+      state.listing.push({
+        sourceFile: options.file,
+        sourceLine: k + 1,
+        address: state.pc,
+        bytes: [],
+        sourceText: lines[k]!,
+      });
+    }
+  };
+
+  // Mirror the object bytes of the just-emitted generated line onto the current
+  // listing entry, so the full listing shows the same address and bytes as the
+  // binary. Call this immediately after an emit* helper pushes its line.
+  const attachLastGenerated = (entry: GeneratedLine) => {
+    const g = state.generated[state.generated.length - 1];
+    if (g) {
+      entry.bytes = g.bytes;
+      entry.address = g.address;
+    }
+  };
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     const lineNum = i + 1;
 
     // Parse the line
     const parsed = parseLine(line);
+
+    // Record this source line in the full listing. Byte-emitting lines fill in
+    // their object bytes below; comments, blanks, and directive-only lines stay
+    // text-only. This guarantees every source line reaches the listing.
+    const listingEntry: GeneratedLine = {
+      sourceFile: options.file,
+      sourceLine: lineNum,
+      address: state.pc,
+      bytes: [],
+      sourceText: line,
+    };
+    state.listing.push(listingEntry);
 
     // Handle directives
     if (parsed.type === "directive" && parsed.directive) {
@@ -193,11 +234,15 @@ function processLinesRecursive(
                 lineNum,
                 `Invalid .if expression: ${result?.error || "Unknown error"}`,
               );
-              // Skip to matching .endif
-              i = findMatchingEndif(lines, i) - 1;
+              // Skip to matching .endif, recording the skipped block.
+              const endifIdx = findMatchingEndif(lines, i);
+              recordSkipped(i + 1, endifIdx - 1);
+              i = endifIdx - 1;
             } else if (result.value === 0) {
-              // Condition false, skip block
-              i = findMatchingEndif(lines, i) - 1;
+              // Condition false: skip the block but keep it in the listing.
+              const endifIdx = findMatchingEndif(lines, i);
+              recordSkipped(i + 1, endifIdx - 1);
+              i = endifIdx - 1;
             }
             // If true, continue to next line
           }
@@ -205,12 +250,20 @@ function processLinesRecursive(
 
         case "elseif":
           // Reached elseif means previous if was true, skip to endif
-          i = findMatchingEndif(lines, i) - 1;
+          {
+            const endifIdx = findMatchingEndif(lines, i);
+            recordSkipped(i + 1, endifIdx - 1);
+            i = endifIdx - 1;
+          }
           break;
 
         case "else":
           // Reached else means previous condition was true, skip to endif
-          i = findMatchingEndif(lines, i) - 1;
+          {
+            const endifIdx = findMatchingEndif(lines, i);
+            recordSkipped(i + 1, endifIdx - 1);
+            i = endifIdx - 1;
+          }
           break;
 
         case "endif":
@@ -244,7 +297,9 @@ function processLinesRecursive(
                 lineNum,
                 `Invalid .repeat expression: ${result?.error || "Unknown error"}`,
               );
-              i = findMatchingEndrepeat(lines, i) - 1;
+              const endrepIdx = findMatchingEndrepeat(lines, i);
+              recordSkipped(i + 1, endrepIdx - 1);
+              i = endrepIdx - 1;
             } else {
               const count = result.value;
               const endLine = findMatchingEndrepeat(lines, i);
@@ -255,6 +310,9 @@ function processLinesRecursive(
                 processLinesRecursive(bodyLines, state, options, includeDepth);
               }
 
+              // The body's expansions are already in the listing; just keep the
+              // closing .endrepeat line visible.
+              recordSkipped(endLine, endLine);
               i = endLine; // Skip to after endrepeat
             }
           }
@@ -284,6 +342,8 @@ function processLinesRecursive(
               state.macros.push(def);
             }
           }
+          // Keep the macro definition body (and its .endmacro) in the listing.
+          recordSkipped(i + 1, endLine);
           i = endLine;
           break;
         }
@@ -341,6 +401,7 @@ function processLinesRecursive(
               parsed.directive as "byte" | "word",
               parsed.data,
             );
+            attachLastGenerated(listingEntry);
             state.pc += byteCount;
           }
           break;
@@ -356,6 +417,7 @@ function processLinesRecursive(
               parsed.text,
               parsed.directive === "textc",
             );
+            attachLastGenerated(listingEntry);
             state.pc += byteCount;
           }
           break;
@@ -391,6 +453,7 @@ function processLinesRecursive(
               countRes.value,
               value,
             );
+            attachLastGenerated(listingEntry);
             state.pc += byteCount;
           }
           break;
@@ -430,6 +493,7 @@ function processLinesRecursive(
                 pad,
                 value,
               );
+              attachLastGenerated(listingEntry);
               state.pc += byteCount;
             }
           }
@@ -444,7 +508,7 @@ function processLinesRecursive(
           // new listing page, which the formatter derives from the event.
           state.listingEvents.push({
             type: parsed.directive,
-            after: state.generated.length,
+            after: state.listing.length,
             text: parsed.file ?? "",
           });
           break;
@@ -473,7 +537,7 @@ function processLinesRecursive(
           }
           state.listingEvents.push({
             type: parsed.directive,
-            after: state.generated.length,
+            after: state.listing.length,
             value,
           });
           break;
@@ -487,7 +551,7 @@ function processLinesRecursive(
           // synonym for `page` in the formatter.
           state.listingEvents.push({
             type: parsed.directive === "eject" ? "page" : parsed.directive,
-            after: state.generated.length,
+            after: state.listing.length,
           });
           break;
 
@@ -572,6 +636,8 @@ function processLinesRecursive(
           bytes: encoded,
           sourceText: line,
         });
+        listingEntry.bytes = encoded;
+        listingEntry.address = state.pc;
         state.pc += encoded.length;
       }
     }

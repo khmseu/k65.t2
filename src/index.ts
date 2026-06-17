@@ -1,9 +1,5 @@
 import { assembleFile, printAssemblyResult } from "./assembler.js";
-import {
-  formatListing,
-  formatSymbolTable,
-  generateBinary,
-} from "./output-formatter.js";
+import { formatListing, formatSymbolTable } from "./output-formatter.js";
 import { writeFileSync } from "node:fs";
 import { exit } from "node:process";
 
@@ -53,7 +49,7 @@ try {
   // effort produced so far, but a failed assembly should not masquerade as a
   // valid object file, so the binary is only written when assembly succeeded.
   if (result.errors.length === 0) {
-    const binary = generateBinary(result.listing);
+    const binary = Buffer.from(result.binary);
     writeFileSync(binaryPath, binary);
     console.log(`Wrote binary:  ${binaryPath} (${binary.length} bytes)`);
   } else {

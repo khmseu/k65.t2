@@ -45,6 +45,7 @@ export function assemble(
     errors: [],
     warnings: [],
     generated: [],
+    listing: [],
     macros: [],
     listingEvents: [],
   };
@@ -87,6 +88,7 @@ export function assemble(
   // Format output
   const output = formatOutput(
     state.generated,
+    state.listing,
     state.symbolTable.all(),
     state.errors,
     state.warnings,
@@ -95,7 +97,7 @@ export function assemble(
 
   return {
     binary: Array.from(output.binary),
-    listing: state.generated,
+    listing: state.listing,
     symbolTable: state.symbolTable.all(),
     errors: state.errors,
     warnings: state.warnings,

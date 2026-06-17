@@ -224,7 +224,11 @@ export function generateBinary(generated: GeneratedLine[]): Buffer {
 }
 
 /**
- * Generate symbol table dump
+ * Generate symbol table dump.
+ *
+ * Labels and constants are listed twice: once sorted numerically (by address /
+ * value) and once sorted alphabetically by name, so a symbol can be found
+ * either way. Macros are listed once, alphabetically.
  */
 export function formatSymbolTable(symbols: Symbol[]): string {
   const lines: string[] = [];
@@ -234,39 +238,40 @@ export function formatSymbolTable(symbols: Symbol[]): string {
   lines.push("=".repeat(80));
   lines.push("");
 
-  const labels = symbols
-    .filter((s) => s.type === "label")
-    .sort((a, b) => (a.address ?? 0) - (b.address ?? 0));
-  const constants = symbols
-    .filter((s) => s.type === "constant")
-    .sort((a, b) => a.name.localeCompare(b.name));
+  // Numeric value of a symbol: address for labels, value for constants.
+  const valueOf = (s: Symbol): number => {
+    const raw = s.type === "label" ? s.address : s.value;
+    return typeof raw === "number" ? raw : 0;
+  };
+
+  const valued = symbols.filter(
+    (s) => s.type === "label" || s.type === "constant",
+  );
   const macros = symbols
     .filter((s) => s.type === "macro")
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  if (labels.length > 0) {
-    lines.push("LABELS:");
+  const formatSym = (sym: Symbol): string => {
+    const v = valueOf(sym);
+    const addr = (v & 0xffff).toString(16).padStart(4, "0").toUpperCase();
+    const kind = sym.type === "label" ? "label" : "const";
+    return `  ${sym.name.padEnd(20)} = $${addr} (${v})  [${kind}]`;
+  };
+
+  if (valued.length > 0) {
+    const byValue = [...valued].sort((a, b) => valueOf(a) - valueOf(b));
+    lines.push("BY VALUE (numerical):");
     lines.push("-".repeat(80));
-    for (const sym of labels) {
-      const addr = (sym.address ?? 0)
-        .toString(16)
-        .padStart(4, "0")
-        .toUpperCase();
-      lines.push(`  ${sym.name.padEnd(20)} = $${addr} (${sym.address ?? 0})`);
+    for (const sym of byValue) {
+      lines.push(formatSym(sym));
     }
     lines.push("");
-  }
 
-  if (constants.length > 0) {
-    lines.push("CONSTANTS:");
+    const byName = [...valued].sort((a, b) => a.name.localeCompare(b.name));
+    lines.push("BY NAME (alphabetical):");
     lines.push("-".repeat(80));
-    for (const sym of constants) {
-      const val = sym.value;
-      const valStr =
-        typeof val === "number"
-          ? `$${val.toString(16).toUpperCase()} (${val})`
-          : String(val);
-      lines.push(`  ${sym.name.padEnd(20)} = ${valStr}`);
+    for (const sym of byName) {
+      lines.push(formatSym(sym));
     }
     lines.push("");
   }
@@ -293,12 +298,13 @@ export function formatSymbolTable(symbols: Symbol[]): string {
  */
 export function formatOutput(
   generated: GeneratedLine[],
+  listingLines: GeneratedLine[],
   symbols: Symbol[],
   errors: AssemblyError[],
   warnings: AssemblyError[],
   events: ListingEvent[] = [],
 ): FormattedOutput {
-  const listing = formatListing(generated, errors, warnings, events);
+  const listing = formatListing(listingLines, errors, warnings, events);
   const binary = generateBinary(generated);
   const symbolTable = formatSymbolTable(symbols);
 
