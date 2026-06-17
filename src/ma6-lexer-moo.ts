@@ -6,19 +6,12 @@
 
 import moo from "moo";
 
+// NOTE: Comments (`;` to end of line) and leading/inner whitespace are handled
+// by the wrapper (ma6-parser-wrapper.ts): comments are stripped before lexing
+// and WS tokens are filtered out before the token stream reaches the grammar.
+// That keeps this lexer free of comment ambiguities (e.g. `*` is always the
+// location counter / multiply operator here, never a comment marker).
 export const lexer = moo.compile({
-  // Comments must be skipped/handled specially
-  linecomment: {
-    // @ts-ignore: Moo type definitions conflict with RegExp
-    match: /^[\*;].*/,
-    lineBreaks: false,
-  },
-  comment: {
-    // @ts-ignore: Moo type definitions conflict with RegExp
-    match: /;.*/,
-    lineBreaks: false,
-  },
-
   // Directives (must come before generic identifiers)
   // Note: Moo requires non-capturing groups (?:...) instead of /i flag
   OrgDirective: /\.(?i:org)/,
@@ -62,7 +55,6 @@ export const lexer = moo.compile({
   MINUS: /-/,
   STAR: /\*/,
   DIV: /\//,
-  MOD: /%/,
   AND_OP: /&/,
   OR_OP: /\|/,
   XOR_OP: /\^/,
@@ -75,22 +67,19 @@ export const lexer = moo.compile({
   ESCAPE: /\\/,
   HASH: /#/,
 
-  // Registers (word boundary required)
+  // Registers (word boundary required so mnemonics like AND/TAX are not split).
   // Note: Moo doesn't support /i flag. Match both cases explicitly.
   REG_A: {
     // @ts-ignore: Moo type definitions conflict with RegExp
     match: /[Aa]\b/,
-    fast: true,
   },
   REG_X: {
     // @ts-ignore: Moo type definitions conflict with RegExp
     match: /[Xx]\b/,
-    fast: true,
   },
   REG_Y: {
     // @ts-ignore: Moo type definitions conflict with RegExp
     match: /[Yy]\b/,
-    fast: true,
   },
 
   // String and character literals
@@ -105,7 +94,8 @@ export const lexer = moo.compile({
     value: (s: string) => s.slice(1, -1).replace(/\\(.)/g, "$1"),
   },
 
-  // Numeric literals (in order of precedence)
+  // Numeric literals (in order of precedence). BINNUM must precede MOD so a
+  // `%` followed by binary digits is read as a binary literal, not modulo.
   HEXNUM: {
     // @ts-ignore: Moo type definitions conflict with RegExp
     match: /(?:0x|\$)[0-9a-fA-F]+/,
@@ -121,6 +111,7 @@ export const lexer = moo.compile({
     match: /(?:0b|%)[01]+/,
     value: (s: string) => parseInt(s.replace(/^0b/, "").replace(/^%/, ""), 2),
   },
+  MOD: /%/,
   DECNUM: {
     // @ts-ignore: Moo type definitions conflict with RegExp
     match: /[0-9]+/,
@@ -133,25 +124,12 @@ export const lexer = moo.compile({
     match: /@?[a-zA-Z_$][a-zA-Z0-9_$]*/,
   },
 
-  // Quoted strings (unescaped)
-  Qstring: {
-    // @ts-ignore: Moo type definitions conflict with RegExp
-    match: /"[^"]*"/,
-    value: (s: string) => s.slice(1, -1),
-  },
-
-  // Catch-all for unquoted words
-  Words: /(?![\s"].*)\S+/,
-
-  // Whitespace (skipped)
+  // Whitespace (filtered out by the wrapper before parsing)
   WS: {
     // @ts-ignore: Moo type definitions conflict with RegExp
     match: /\s+/,
     lineBreaks: true,
   },
-
-  // Error token (should not match)
-  Unimplemented: /##################################/,
 });
 
 // Export lexer for use with Nearley

@@ -209,6 +209,7 @@ export interface ParsedLine {
   expression?: string; // for .if, .repeat, .equ, .org
   operation?: string; // mnemonic
   args?: string[]; // instruction arguments
+  mode?: AddressingMode; // resolved addressing mode (when known from the parser)
   raw: string;
 }
 

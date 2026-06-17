@@ -1,214 +1,288 @@
 # 6502 Assembly Language Parser (Nearley Grammar)
-# Translated from Chevrotain lexer/parser (ma6Lexer.ts, Ma6Parser.ts)
-# Uses Moo tokens defined in ma6-lexer-moo.ts
+#
+# Scope: parse ONE physical source line into a structured AST. This is the
+# "basic syntax recognition" layer only. Control-flow semantics
+# (.if/.macro/.repeat block handling, macro expansion, multi-pass relaxation)
+# are the assembler's job and live in src/line-processor.ts -- NOT here.
+#
+# Tokens are defined by the Moo lexer in src/ma6-lexer-moo.ts. The @lexer
+# directive below binds them so %TOKEN references compile to {type:"TOKEN"}
+# matchers (matched against token.type). The wrapper (ma6-parser-wrapper.ts)
+# strips comments and filters out whitespace before feeding the line, so no
+# rule here references %WS, and token references use the % prefix.
+
+@{%
+import lexer from "../ma6-lexer-moo.js";
+%}
+@lexer lexer
 
 # ============================================================================
-# GRAMMAR RULES (Operator Precedence: Low to High)
+# LINE STRUCTURE
 # ============================================================================
+#
+# A line is an optional label followed by an optional statement. The wrapper
+# never feeds a fully-empty line, but "label only", "statement only" and
+# "label statement" (e.g. "FOO: LDA #1") are all valid.
 
-# Entry point
 line ->
-    %linecomment {% id %}
-  | code_line {% d => ({ type: 'line', content: d[0] }) %}
+    label
+      {% d => ({ label: d[0], stmt: null }) %}
+  | statement
+      {% d => ({ label: null, stmt: d[0] }) %}
+  | label statement
+      {% d => ({ label: d[0], stmt: d[1] }) %}
 
-code_line ->
-    %IDENT _ ":" _ content:? _ %Comment:?
-      {% d => ({ type: 'code_line', label: d[0].value, content: d[4], comment: d[6] }) %}
-  | content
-      {% d => ({ type: 'code_line', content: d[0] }) %}
+label ->
+    %IDENT %COLON
+      {% d => d[0].value %}
 
-content ->
-    directive
-  | assignment
-  | operation _ arg_list:* 
-      {% d => ({ type: 'operation', op: d[0], args: d[2] }) %}
+statement ->
+    directive    {% id %}
+  | assignment   {% id %}
+  | instruction  {% id %}
+
+# ============================================================================
+# ASSIGNMENT:  NAME = EXPR   or   NAME .set EXPR
+# ============================================================================
+
+assignment ->
+    %IDENT %ASSIGN expr
+      {% d => ({ kind: "assign", name: d[0].value, value: d[2] }) %}
+  | %IDENT %SetDirective expr
+      {% d => ({ kind: "assign", name: d[0].value, value: d[2] }) %}
+
+# ============================================================================
+# INSTRUCTION:  MNEMONIC [operand]
+# ============================================================================
+#
+# The operand carries its addressing-mode shape so the assembler does not have
+# to re-derive it with regexes.
+
+instruction ->
+    %IDENT
+      {% d => ({ kind: "instruction", mnemonic: d[0].value, arg: null }) %}
+  | %IDENT operand
+      {% d => ({ kind: "instruction", mnemonic: d[0].value, arg: d[1] }) %}
+
+operand ->
+    %REG_A
+      {% () => ({ mode: "accumulator", expr: null }) %}
+  | %HASH expr
+      {% d => ({ mode: "immediate", expr: d[1] }) %}
+  | %LPAREN expr %COMMA %REG_X %RPAREN
+      {% d => ({ mode: "indirectX", expr: d[1] }) %}
+  | %LPAREN expr %RPAREN %COMMA %REG_Y
+      {% d => ({ mode: "indirectY", expr: d[1] }) %}
+  | %LPAREN expr %RPAREN
+      {% d => ({ mode: "indirect", expr: d[1] }) %}
+  | expr %COMMA %REG_X
+      {% d => ({ mode: "indexedX", expr: d[0] }) %}
+  | expr %COMMA %REG_Y
+      {% d => ({ mode: "indexedY", expr: d[0] }) %}
+  | expr
+      {% d => ({ mode: "absolute", expr: d[0] }) %}
 
 # ============================================================================
 # DIRECTIVES
 # ============================================================================
 
 directive ->
-    (%OrgDirective | %EquDirective | %SetDirective | %RepeatDirective | %IfDirective | %ElseIfDirective) _ expr
-      {% d => ({ type: d[0][0].type.toLowerCase(), expr: d[2] }) %}
-  | %IncludeDirective _ nqstring
-      {% d => ({ type: 'include', file: d[2] }) %}
-  | %AlignDirective _ expr (_ "," _ expr):?
-      {% d => ({ type: 'align', align: d[2], fill: d[3] ? d[3][3] : null }) %}
-  | %MacroDirective _ %IDENT (_ "," _ macro_args):?
-      {% d => ({ type: 'macro', name: d[2].value, args: d[3] ? d[3][3] : [] }) %}
+    %OrgDirective expr
+      {% d => ({ kind: "directive", name: "org", expr: d[1] }) %}
+  | %EquDirective expr
+      {% d => ({ kind: "directive", name: "equ", expr: d[1] }) %}
+  | %IfDirective expr
+      {% d => ({ kind: "directive", name: "if", expr: d[1] }) %}
+  | %ElseIfDirective expr
+      {% d => ({ kind: "directive", name: "elseif", expr: d[1] }) %}
+  | %RepeatDirective expr
+      {% d => ({ kind: "directive", name: "repeat", expr: d[1] }) %}
+  | %IncludeDirective %STRING
+      {% d => ({ kind: "directive", name: "include", file: d[1].value }) %}
+  | %AlignDirective expr alignFill
+      {% d => ({ kind: "directive", name: "align", expr: d[1], fill: d[2] }) %}
+  | %MacroDirective %IDENT macroParams
+      {% d => ({ kind: "directive", name: "macro", macroName: d[1].value, params: d[2] }) %}
   | %EndMacroDirective
-      {% d => ({ type: 'endmacro' }) %}
+      {% () => ({ kind: "directive", name: "endmacro" }) %}
   | %EndRepeatDirective
-      {% d => ({ type: 'endrepeat' }) %}
+      {% () => ({ kind: "directive", name: "endrepeat" }) %}
   | %ElseDirective
-      {% d => ({ type: 'else' }) %}
+      {% () => ({ kind: "directive", name: "else" }) %}
   | %EndIfDirective
-      {% d => ({ type: 'endif' }) %}
-  | %ByteDirective _ arg_list
-      {% d => ({ type: 'byte', args: d[2] }) %}
-  | %WordDirective _ arg_list
-      {% d => ({ type: 'word', args: d[2] }) %}
-  | %TextDirective _ text_list
-      {% d => ({ type: 'text', items: d[2] }) %}
-  | %FillDirective _ expr (_ "," _ expr):?
-      {% d => ({ type: 'fill', count: d[2], fill: d[3] ? d[3][3] : null }) %}
+      {% () => ({ kind: "directive", name: "endif" }) %}
+  | %ByteDirective dataList
+      {% d => ({ kind: "directive", name: "byte", args: d[1] }) %}
+  | %WordDirective dataList
+      {% d => ({ kind: "directive", name: "word", args: d[1] }) %}
+  | %TextDirective textList
+      {% d => ({ kind: "directive", name: "text", items: d[1] }) %}
+  | %FillDirective expr alignFill
+      {% d => ({ kind: "directive", name: "fill", expr: d[1], fill: d[2] }) %}
   | %ListDirective
-      {% d => ({ type: 'list' }) %}
+      {% () => ({ kind: "directive", name: "list" }) %}
   | %NoListDirective
-      {% d => ({ type: 'nolist' }) %}
+      {% () => ({ kind: "directive", name: "nolist" }) %}
   | %PageDirective
-      {% d => ({ type: 'page' }) %}
+      {% () => ({ kind: "directive", name: "page" }) %}
   | %EjectDirective
-      {% d => ({ type: 'eject' }) %}
-  | %TitleDirective _ nqstring
-      {% d => ({ type: 'title', text: d[2] }) %}
-  | %SubttlDirective _ nqstring
-      {% d => ({ type: 'subttl', text: d[2] }) %}
-  | %PageSizeDirective _ expr
-      {% d => ({ type: 'pagesize', size: d[2] }) %}
-  | %BytesPerLineDirective _ expr
-      {% d => ({ type: 'bytesperline', count: d[2] }) %}
-  | %PrintDirective _ nqstring
-      {% d => ({ type: 'print', text: d[2] }) %}
+      {% () => ({ kind: "directive", name: "eject" }) %}
+  | %TitleDirective %STRING
+      {% d => ({ kind: "directive", name: "title", text: d[1].value }) %}
+  | %SubttlDirective %STRING
+      {% d => ({ kind: "directive", name: "subttl", text: d[1].value }) %}
+  | %PageSizeDirective expr
+      {% d => ({ kind: "directive", name: "pagesize", expr: d[1] }) %}
+  | %BytesPerLineDirective expr
+      {% d => ({ kind: "directive", name: "bytesperline", expr: d[1] }) %}
+  | %PrintDirective %STRING
+      {% d => ({ kind: "directive", name: "print", text: d[1].value }) %}
 
-macro_args ->
-    %IDENT (_ "," _ %IDENT):*
-      {% d => [d[0].value, ...(d[1] || []).map(x => x[3].value)] %}
+# Optional ", EXPR" tail shared by .align / .fill
+alignFill ->
+    null
+      {% () => null %}
+  | %COMMA expr
+      {% d => d[1] %}
 
-assignment ->
-    %IDENT _ (%ASSIGN | %SetDirective) _ expr
-      {% d => ({ type: 'assignment', name: d[0].value, value: d[4] }) %}
+macroParams ->
+    null
+      {% () => [] %}
+  | %COMMA identList
+      {% d => d[1] %}
 
-# ============================================================================
-# OPERANDS & ADDRESSING MODES
-# ============================================================================
+identList ->
+    %IDENT
+      {% d => [d[0].value] %}
+  | identList %COMMA %IDENT
+      {% d => [...d[0], d[2].value] %}
 
-arg_list ->
-    arg (_ "," _ arg):*
-      {% d => [d[0], ...(d[1] || []).map(x => x[3])] %}
+dataList ->
+    expr
+      {% d => [d[0]] %}
+  | dataList %COMMA expr
+      {% d => [...d[0], d[2]] %}
 
-arg ->
-    %REG_A
-      {% d => ({ type: 'reg', value: 'A' }) %}
-  | %HASH _ expr
-      {% d => ({ type: 'immediate', expr: d[2] }) %}
-  | %LPAREN _ expr _ %RPAREN _ %COMMA _ %REG_X
-      {% d => ({ type: 'indirect_x', expr: d[2] }) %}
-  | %LPAREN _ expr _ %RPAREN _ %COMMA _ %REG_Y
-      {% d => ({ type: 'indirect_y', expr: d[2] }) %}
-  | %LPAREN _ expr _ %COMMA _ %REG_X _ %RPAREN
-      {% d => ({ type: 'indexed_x', expr: d[2] }) %}
-  | %LPAREN _ expr _ %COMMA _ %REG_Y _ %RPAREN
-      {% d => ({ type: 'indexed_y', expr: d[2] }) %}
-  | %LPAREN _ expr _ %RPAREN
-      {% d => ({ type: 'indirect', expr: d[2] }) %}
-  | expr
-      {% d => ({ type: 'absolute', expr: d[0] }) %}
+textList ->
+    textItem
+      {% d => [d[0]] %}
+  | textList %COMMA textItem
+      {% d => [...d[0], d[2]] %}
 
-text_list ->
-    text_string (_ %COMMA _ text_string):*
-      {% d => [d[0], ...(d[1] || []).map(x => x[3])] %}
-
-text_string ->
+textItem ->
     %STRING
-      {% d => d[0].value %}
+      {% d => ({ t: "str", v: d[0].value }) %}
   | expr
-      {% d => ({ type: 'expr', value: d[0] }) %}
+      {% d => ({ t: "expr", v: d[0] }) %}
 
 # ============================================================================
-# EXPRESSION HIERARCHY (Left-Associative, Lowest to Highest Precedence)
+# EXPRESSIONS (lowest to highest precedence, left-associative)
 # ============================================================================
+#
+# AST node shapes produced here:
+#   { t: "num", v: <number> }            -- numeric literal (already decoded)
+#   { t: "sym", name: <string> }         -- identifier reference
+#   { t: "pc" }                          -- "*" current location counter
+#   { t: "bin", op: <string>, l, r }     -- binary operator
+#   { t: "un", op: <string>, e }         -- unary operator
 
-expr -> or_expr
+expr -> orExpr {% id %}
 
-or_expr ->
-    xor_expr
-      {% d => d[0] %}
-  | or_expr _ %OR_OP _ xor_expr
-      {% d => ({ type: 'or', left: d[0], right: d[4] }) %}
+# "|" is C-style bitwise OR; "!" is the MACRO-10 inclusive-OR operator.
+orExpr ->
+    xorExpr
+      {% id %}
+  | orExpr %OR_OP xorExpr
+      {% d => ({ t: "bin", op: "|", l: d[0], r: d[2] }) %}
+  | orExpr %LNOT xorExpr
+      {% d => ({ t: "bin", op: "|", l: d[0], r: d[2] }) %}
 
-xor_expr ->
-    and_expr
-      {% d => d[0] %}
-  | xor_expr _ %XOR_OP _ and_expr
-      {% d => ({ type: 'xor', left: d[0], right: d[4] }) %}
+xorExpr ->
+    andExpr
+      {% id %}
+  | xorExpr %XOR_OP andExpr
+      {% d => ({ t: "bin", op: "^", l: d[0], r: d[2] }) %}
 
-and_expr ->
-    equality_expr
-      {% d => d[0] %}
-  | and_expr _ %AND_OP _ equality_expr
-      {% d => ({ type: 'and', left: d[0], right: d[4] }) %}
+andExpr ->
+    eqExpr
+      {% id %}
+  | andExpr %AND_OP eqExpr
+      {% d => ({ t: "bin", op: "&", l: d[0], r: d[2] }) %}
 
-equality_expr ->
-    relational_expr
-      {% d => d[0] %}
-  | equality_expr _ (%EQ | %ASSIGN | %NE) _ relational_expr
-      {% d => ({ type: 'eq', left: d[0], op: d[2][0].type, right: d[4] }) %}
+eqExpr ->
+    relExpr
+      {% id %}
+  | eqExpr %EQ relExpr
+      {% d => ({ t: "bin", op: "==", l: d[0], r: d[2] }) %}
+  | eqExpr %ASSIGN relExpr
+      {% d => ({ t: "bin", op: "==", l: d[0], r: d[2] }) %}
+  | eqExpr %NE relExpr
+      {% d => ({ t: "bin", op: "!=", l: d[0], r: d[2] }) %}
 
-relational_expr ->
-    additive_expr
-      {% d => d[0] %}
-  | relational_expr _ (%LT | %GT | %LE | %GE) _ additive_expr
-      {% d => ({ type: d[2][0].type.toLowerCase(), left: d[0], right: d[4] }) %}
+relExpr ->
+    addExpr
+      {% id %}
+  | relExpr %LT addExpr
+      {% d => ({ t: "bin", op: "<", l: d[0], r: d[2] }) %}
+  | relExpr %GT addExpr
+      {% d => ({ t: "bin", op: ">", l: d[0], r: d[2] }) %}
+  | relExpr %LE addExpr
+      {% d => ({ t: "bin", op: "<=", l: d[0], r: d[2] }) %}
+  | relExpr %GE addExpr
+      {% d => ({ t: "bin", op: ">=", l: d[0], r: d[2] }) %}
 
-additive_expr ->
-    multiplicative_expr
-      {% d => d[0] %}
-  | additive_expr _ (%PLUS | %MINUS) _ multiplicative_expr
-      {% d => ({ type: d[2][0].type.toLowerCase(), left: d[0], right: d[4] }) %}
+addExpr ->
+    mulExpr
+      {% id %}
+  | addExpr %PLUS mulExpr
+      {% d => ({ t: "bin", op: "+", l: d[0], r: d[2] }) %}
+  | addExpr %MINUS mulExpr
+      {% d => ({ t: "bin", op: "-", l: d[0], r: d[2] }) %}
 
-multiplicative_expr ->
-    unary_expr
-      {% d => d[0] %}
-  | multiplicative_expr _ (%STAR | %DIV | %MOD) _ unary_expr
-      {% d => ({ type: d[2][0].type.toLowerCase(), left: d[0], right: d[4] }) %}
+mulExpr ->
+    unaryExpr
+      {% id %}
+  | mulExpr %STAR unaryExpr
+      {% d => ({ t: "bin", op: "*", l: d[0], r: d[2] }) %}
+  | mulExpr %DIV unaryExpr
+      {% d => ({ t: "bin", op: "/", l: d[0], r: d[2] }) %}
+  | mulExpr %MOD unaryExpr
+      {% d => ({ t: "bin", op: "%", l: d[0], r: d[2] }) %}
 
-unary_expr ->
-    primary_expr
-      {% d => d[0] %}
-  | (%PLUS | %MINUS | %BITNOT | %LNOT | %LT | %GT) _ unary_expr
-      {% d => ({ type: d[0][0].type.toLowerCase(), expr: d[2] }) %}
+unaryExpr ->
+    primary
+      {% id %}
+  | %PLUS unaryExpr
+      {% d => d[1] %}
+  | %MINUS unaryExpr
+      {% d => ({ t: "un", op: "-", e: d[1] }) %}
+  | %BITNOT unaryExpr
+      {% d => ({ t: "un", op: "~", e: d[1] }) %}
+  | %LNOT unaryExpr
+      {% d => ({ t: "un", op: "!", e: d[1] }) %}
+  | %LT unaryExpr
+      {% d => ({ t: "un", op: "<", e: d[1] }) %}
+  | %GT unaryExpr
+      {% d => ({ t: "un", op: ">", e: d[1] }) %}
 
-primary_expr ->
-    number
-      {% d => d[0] %}
-  | %CHAR
-      {% d => ({ type: 'char', value: d[0].value }) %}
-  | %IDENT
-      {% d => ({ type: 'ident', value: d[0].value }) %}
-  | %ESCAPE _ %IDENT
-      {% d => ({ type: 'escaped_ident', value: d[2].value }) %}
-  | %STAR
-      {% d => ({ type: 'current_location' }) %}
-  | %LPAREN _ expr _ %RPAREN
-      {% d => d[2] %}
-
-number ->
+primary ->
     %DECNUM
-      {% d => ({ type: 'number', base: 10, value: d[0].value }) %}
+      {% d => ({ t: "num", v: d[0].value }) %}
   | %HEXNUM
-      {% d => ({ type: 'number', base: 16, value: d[0].value }) %}
+      {% d => ({ t: "num", v: d[0].value }) %}
   | %OCTNUM
-      {% d => ({ type: 'number', base: 8, value: d[0].value }) %}
+      {% d => ({ t: "num", v: d[0].value }) %}
   | %BINNUM
-      {% d => ({ type: 'number', base: 2, value: d[0].value }) %}
-
-# ============================================================================
-# STRING UTILITIES
-# ============================================================================
-
-nqstring ->
-    %Qstring
-      {% d => d[0].value %}
-  | %Words
-      {% d => d[0].value %}
-
-operation -> null
-  # Placeholder for CPU operations (opcodes)
-  # To be expanded with: ADC, AND, ASL, BCC, BCS, BEQ, BIT, BMI, BNE, BPL, BRK,
-  #                      BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX,
-  #                      DEY, EOR, INC, INX, INY, JMP, JSR, LDA, LDX, LDY, LSR,
-  #                      NOP, ORA, PHA, PHP, PLA, PLP, ROL, ROR, RTI, RTS, SBC,
-  #                      SEC, SED, SEI, STA, STX, STY, TAX, TAY, TSX, TXA, TXS, TYA
-
-_ -> %WS:?
+      {% d => ({ t: "num", v: d[0].value }) %}
+  | %CHAR
+      {% d => ({ t: "num", v: String(d[0].value).charCodeAt(0) }) %}
+  | %STRING
+      {% d => ({ t: "num", v: String(d[0].value).charCodeAt(0) }) %}
+  | %IDENT
+      {% d => ({ t: "sym", name: d[0].value }) %}
+  | %ESCAPE %IDENT
+      {% d => ({ t: "sym", name: d[1].value }) %}
+  | %STAR
+      {% () => ({ t: "pc" }) %}
+  | %LPAREN expr %RPAREN
+      {% d => d[1] %}

@@ -5,13 +5,20 @@
  */
 
 import type {
+  AddressingMode,
+  DirectiveType,
   MacroDefinition,
   ParsedLine,
   ProcessorState,
 } from "./assembler-types.js";
 import { ExpressionMemoStore } from "./assembler-types.js";
 import { evaluateExpression } from "./expr-evaluator.js";
-import { findOpcode } from "./6502-opcodes.js";
+import { findOpcode, getOpcodesByMnemonic } from "./6502-opcodes.js";
+import {
+  parseLine as parseLineNearley,
+  type LineParseResult,
+  type DirectiveNode,
+} from "./ma6-parser-wrapper.js";
 
 /**
  * Strip comments from an expression/argument string
@@ -366,12 +373,22 @@ function processLinesRecursive(
         continue;
       }
 
+      // Not a macro and not a known 6502 mnemonic: the legacy parser silently
+      // dropped any token that was not a real instruction (its instruction
+      // regex only matched recognized 3-letter mnemonics). The grammar is more
+      // permissive and will classify arbitrary identifiers as instructions, so
+      // mirror the legacy behavior and treat unknown mnemonics as no-ops.
+      if (getOpcodesByMnemonic(parsed.operation).length === 0) {
+        continue;
+      }
+
       const encoded = encodeInstruction(
         state,
         options.file,
         lineNum,
         parsed.operation,
         parsed.args,
+        parsed.mode,
       );
 
       if (encoded) {
@@ -389,9 +406,256 @@ function processLinesRecursive(
 }
 
 /**
- * Parse a single source line into components
+ * Parse a single source line into the assembler's ParsedLine shape.
+ *
+ * Recognition (label / directive / assignment / instruction + addressing
+ * mode) is performed by the Nearley parser (ma6-parser-wrapper). Expression,
+ * operand and macro-argument *values* are taken from the original source text
+ * (sliced via the parser's token offsets) and handed to the existing
+ * string-based evaluator / macro expander, so numeric results are unchanged.
+ *
+ * Lines the grammar cannot parse fall back to the legacy regex parser, which
+ * still covers a few constructs the grammar does not (e.g. multi-argument
+ * macro calls).
  */
 function parseLine(line: string): ParsedLine {
+  const result = parseLineNearley(line);
+
+  if (result.empty) {
+    // Distinguish blank lines from comment-only lines for parity with the
+    // legacy parser (both are no-ops downstream).
+    const trimmed = line.trim();
+    return {
+      type: trimmed === "" ? "empty" : "comment",
+      raw: line,
+    };
+  }
+
+  if (!result.ast) {
+    // Parser could not recognize the line; fall back to the regex parser.
+    return parseLineRegex(line);
+  }
+
+  return astToParsedLine(result, line);
+}
+
+/** Branch mnemonics always use relative addressing regardless of operand shape. */
+const BRANCH_MNEMONICS = new Set([
+  "BNE",
+  "BEQ",
+  "BCS",
+  "BCC",
+  "BMI",
+  "BPL",
+  "BVC",
+  "BVS",
+]);
+
+/**
+ * Source text of the statement's expression/operand: everything in the parsed
+ * (comment-stripped) line at or after the token following the keyword token.
+ * `keywordTokenIndex` is the index of the directive/mnemonic/name token; the
+ * expression begins at the next token (or the token after that for
+ * assignments, which have an `=`/`.set` operator in between).
+ */
+function sliceFrom(
+  result: LineParseResult,
+  exprTokenIndex: number,
+): string | undefined {
+  const tokens = result.tokens;
+  const source = result.source;
+  if (!tokens || source === undefined) {
+    return undefined;
+  }
+  const tok = tokens[exprTokenIndex];
+  if (!tok) {
+    return undefined;
+  }
+  return source.slice(tok.offset).trim();
+}
+
+/** Map the parser's operand mode + mnemonic to the assembler addressing mode. */
+function resolveMode(
+  mnemonic: string,
+  arg: { mode: string } | null,
+): AddressingMode {
+  if (!arg) {
+    return "implied";
+  }
+  if (arg.mode === "accumulator") {
+    return "accumulator";
+  }
+  if (BRANCH_MNEMONICS.has(mnemonic.toUpperCase())) {
+    return "relative";
+  }
+  switch (arg.mode) {
+    case "immediate":
+      return "immediate";
+    case "indirect":
+      return "indirect";
+    case "indirectX":
+      return "indirectX";
+    case "indirectY":
+      return "indirectY";
+    case "indexedX":
+      return "absoluteX";
+    case "indexedY":
+      return "absoluteY";
+    case "absolute":
+    default:
+      return "absolute";
+  }
+}
+
+/** Convert a successful Nearley parse into the assembler's ParsedLine shape. */
+function astToParsedLine(result: LineParseResult, line: string): ParsedLine {
+  const ast = result.ast!;
+  const label = ast.label ?? undefined;
+  const stmt = ast.stmt;
+
+  // Index of the first token of the statement (after an optional `LABEL :`).
+  const stmtTokenStart = ast.label ? 2 : 0;
+
+  if (!stmt) {
+    // Label only.
+    return label
+      ? { type: "label", label, raw: line }
+      : { type: "empty", raw: line };
+  }
+
+  const base: Pick<ParsedLine, "label" | "raw"> = label
+    ? { label, raw: line }
+    : { raw: line };
+
+  switch (stmt.kind) {
+    case "assign": {
+      // NAME = EXPR  or  NAME .set EXPR -> treat as equ (matches legacy parser,
+      // which mapped both `=` and `.set` assignments through the equ/set path).
+      // tokens: [NAME, ASSIGN|.set, EXPR...]; expression starts at index +2.
+      const expression = sliceFrom(result, stmtTokenStart + 2);
+      return {
+        ...base,
+        type: "directive",
+        directive: "equ",
+        label: stmt.name,
+        ...(expression !== undefined ? { expression } : {}),
+      };
+    }
+
+    case "instruction": {
+      const mnemonic = stmt.mnemonic;
+      // Operand source text begins at the token right after the mnemonic.
+      const operandText = sliceFrom(result, stmtTokenStart + 1) ?? "";
+      const args = parseArgumentList(operandText);
+      const mode = resolveMode(mnemonic, stmt.arg);
+      return {
+        ...base,
+        type: "operation",
+        operation: mnemonic,
+        args,
+        mode,
+      };
+    }
+
+    default:
+      return directiveToParsedLine(stmt, base, result, stmtTokenStart);
+  }
+}
+
+/** Map a directive AST node to a ParsedLine. */
+function directiveToParsedLine(
+  stmt: DirectiveNode,
+  base: Pick<ParsedLine, "label" | "raw">,
+  result: LineParseResult,
+  stmtTokenStart: number,
+): ParsedLine {
+  // Expression source text (for directives that carry one) starts at the
+  // token right after the directive keyword.
+  const exprText = sliceFrom(result, stmtTokenStart + 1);
+
+  switch (stmt.name) {
+    case "org":
+    case "if":
+    case "elseif":
+    case "repeat":
+      return {
+        ...base,
+        type: "directive",
+        directive: stmt.name,
+        ...(exprText !== undefined ? { expression: exprText } : {}),
+      };
+
+    case "equ":
+      // `.equ EXPR` form (label, if any, supplied the name).
+      return {
+        ...base,
+        type: "directive",
+        directive: "equ",
+        ...(exprText !== undefined ? { expression: exprText } : {}),
+      };
+
+    case "macro": {
+      // .macro NAME [, PARAMS] -> legacy shape: label=NAME, expression=PARAMS.
+      const macroName = stmt.macroName ?? base.label;
+      return {
+        ...base,
+        type: "directive",
+        directive: "macro",
+        ...(macroName !== undefined ? { label: macroName } : {}),
+        ...(stmt.params && stmt.params.length > 0
+          ? { expression: stmt.params.join(",") }
+          : {}),
+      };
+    }
+
+    case "byte":
+    case "word": {
+      // Re-split the source operand list the same way the legacy parser did
+      // (naive comma split) so values evaluate identically.
+      const listText = exprText ?? "";
+      const args = listText
+        .split(",")
+        .map((a) => a.trim())
+        .filter((a) => a.length > 0);
+      return {
+        ...base,
+        type: "directive",
+        directive: stmt.name,
+        args,
+      };
+    }
+
+    case "include":
+      return {
+        ...base,
+        type: "directive",
+        directive: "include",
+        ...(stmt.file !== undefined ? { expression: stmt.file } : {}),
+      };
+
+    case "else":
+    case "endif":
+    case "endmacro":
+    case "endrepeat":
+      return { ...base, type: "directive", directive: stmt.name };
+
+    default:
+      // Directives the assembler does not act on (list, nolist, page, eject,
+      // title, subttl, print, align, fill, text, pagesize, bytesperline).
+      // The legacy parser silently ignored these (no-op), so do the same.
+      return {
+        ...base,
+        type: "directive",
+        directive: stmt.name as DirectiveType,
+      };
+  }
+}
+
+/**
+ * Parse a single source line into components (legacy regex parser).
+ * Retained as a fallback for lines the Nearley grammar cannot yet parse.
+ */
+function parseLineRegex(line: string): ParsedLine {
   const trimmed = line.trim();
 
   // Empty or comment
@@ -422,7 +686,7 @@ function parseLine(line: string): ParsedLine {
     }
 
     // Label followed by instruction or directive
-    const restParsed = parseLine(rest);
+    const restParsed = parseLineRegex(rest);
     return { ...restParsed, label };
   }
 
@@ -575,9 +839,11 @@ function encodeInstruction(
   lineNum: number,
   mnemonic: string,
   args: string[],
+  knownMode?: AddressingMode,
 ): number[] | null {
-  // Determine addressing mode from arguments
-  const mode = determineAddressingMode(mnemonic, args);
+  // Use the addressing mode resolved by the parser when available; otherwise
+  // fall back to deriving it from the argument strings (legacy path).
+  const mode = knownMode ?? determineAddressingMode(mnemonic, args);
   if (!mode) {
     addError(
       state,
@@ -859,10 +1125,7 @@ function expandMacro(macro: MacroDefinition, args: string[]): string[] {
     let result = bodyLine;
     macro.params.forEach((param, idx) => {
       const arg = args[idx] ?? "";
-      result = result.replace(
-        new RegExp("\\\\" + param + "\\b", "g"),
-        arg,
-      );
+      result = result.replace(new RegExp("\\\\" + param + "\\b", "g"), arg);
     });
     return result;
   });

@@ -38,6 +38,193 @@ function createParser(): InstanceType<typeof Parser> {
   return parser;
 }
 
+// ===========================================================================
+// AST-PRODUCING LINE PARSER (used by the assembler)
+// ===========================================================================
+//
+// This is the integration point the line-processor consumes. parseLine takes a
+// single physical source line, strips the comment, filters whitespace, runs the
+// Nearley grammar, and returns a normalized AST. Control-flow handling
+// (.if/.macro/.repeat, macro expansion, passes) is the caller's responsibility.
+
+/** Expression AST node, as emitted by ma6.ne. */
+export type ExprNode =
+  | { t: "num"; v: number }
+  | { t: "sym"; name: string }
+  | { t: "pc" }
+  | { t: "bin"; op: string; l: ExprNode; r: ExprNode }
+  | { t: "un"; op: string; e: ExprNode };
+
+/** Addressing-mode operand attached to an instruction. */
+export interface OperandNode {
+  mode:
+    | "accumulator"
+    | "immediate"
+    | "indirect"
+    | "indirectX"
+    | "indirectY"
+    | "indexedX"
+    | "indexedY"
+    | "absolute";
+  expr: ExprNode | null;
+}
+
+export type TextItem = { t: "str"; v: string } | { t: "expr"; v: ExprNode };
+
+/** A parsed statement: an assignment, a directive, or an instruction. */
+export type StmtNode =
+  | { kind: "assign"; name: string; value: ExprNode }
+  | { kind: "instruction"; mnemonic: string; arg: OperandNode | null }
+  | DirectiveNode;
+
+export interface DirectiveNode {
+  kind: "directive";
+  name: string;
+  expr?: ExprNode;
+  fill?: ExprNode | null;
+  file?: string;
+  text?: string;
+  macroName?: string;
+  params?: string[];
+  args?: ExprNode[];
+  items?: TextItem[];
+}
+
+export interface LineAst {
+  label: string | null;
+  stmt: StmtNode | null;
+}
+
+export interface LineParseResult {
+  /** Parsed AST, or null when the line is empty/comment-only or failed. */
+  ast: LineAst | null;
+  /** True when the line had no content (blank or comment-only). */
+  empty: boolean;
+  /** Error message when parsing failed; undefined on success/empty. */
+  error?: string;
+  /**
+   * The comment-stripped, trimmed source line that was parsed. Present for
+   * non-empty lines (success or failure). The assembler slices this using the
+   * token offsets below to recover expression/operand source text, which it
+   * feeds to its own (string-based) expression evaluator and macro expander.
+   */
+  source?: string;
+  /** Non-whitespace tokens (with `.offset`/`.text`) for `source`. */
+  tokens?: moo.Token[];
+}
+
+/**
+ * Strip an end-of-line comment. Comments start at the first `;` and run to the
+ * end of the line regardless of any open parentheses (project rule: every
+ * comment runs to the end of the line; a `;` always terminates the line).
+ */
+function stripLineComment(line: string): string {
+  const idx = line.indexOf(";");
+  return idx === -1 ? line : line.slice(0, idx);
+}
+
+/**
+ * A thin adapter over the Moo lexer that transparently discards whitespace
+ * tokens. The grammar references no %WS, so filtering here keeps the grammar
+ * simple and unambiguous. Implements the minimal Nearley lexer interface.
+ */
+const filteringLexer = {
+  reset(chunk?: string, info?: unknown) {
+    // @ts-ignore: Moo's reset signature is compatible at runtime
+    lexer.reset(chunk, info);
+    return this;
+  },
+  next(): moo.Token | undefined {
+    let token = lexer.next();
+    while (token && token.type === "WS") {
+      token = lexer.next();
+    }
+    return token;
+  },
+  save() {
+    return lexer.save();
+  },
+  formatError(token: moo.Token, message?: string) {
+    return lexer.formatError(token, message);
+  },
+  has(tokenType: string) {
+    return lexer.has(tokenType);
+  },
+};
+
+/**
+ * Parse a single source line into a normalized AST.
+ *
+ * The caller (line-processor) is responsible for everything stateful:
+ * symbol resolution, .if/.macro/.repeat block handling, macro expansion, and
+ * instruction encoding. This function only recognizes the line's structure.
+ */
+export function parseLine(line: string): LineParseResult {
+  const stripped = stripLineComment(line).trim();
+  if (stripped === "") {
+    return { ast: null, empty: true };
+  }
+
+  // Collect the non-whitespace tokens (with offsets) so the assembler can
+  // recover expression/operand source text by slicing `stripped`.
+  let tokens: moo.Token[];
+  try {
+    tokens = collectTokens(stripped);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ast: null,
+      empty: false,
+      error: msg.split("\n")[0] ?? msg,
+      source: stripped,
+    };
+  }
+
+  // @ts-ignore: Nearley grammar has `any` type
+  const parser = new Parser(Grammar.fromCompiled(grammar), {
+    lexer: filteringLexer,
+  });
+
+  try {
+    parser.feed(stripped);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ast: null,
+      empty: false,
+      error: msg.split("\n")[0] ?? msg,
+      source: stripped,
+      tokens,
+    };
+  }
+
+  const results = parser.finish();
+  if (results.length === 0) {
+    return {
+      ast: null,
+      empty: false,
+      error: "Incomplete or invalid syntax",
+      source: stripped,
+      tokens,
+    };
+  }
+  return { ast: results[0] as LineAst, empty: false, source: stripped, tokens };
+}
+
+/** Lex a (comment-stripped) line, discarding whitespace tokens. */
+function collectTokens(text: string): moo.Token[] {
+  lexer.reset(text);
+  const tokens: moo.Token[] = [];
+  let token = lexer.next();
+  while (token) {
+    if (token.type !== "WS") {
+      tokens.push(token);
+    }
+    token = lexer.next();
+  }
+  return tokens;
+}
+
 /**
  * Parse a single assembly language line
  * @param input Assembly code line

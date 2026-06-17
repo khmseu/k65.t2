@@ -13,6 +13,35 @@ console.log("Post-processing generated parser...");
 const generatedFile = "src/generated/ma6-parser-generated.ts";
 let content = readFileSync(generatedFile, "utf8");
 
+// nearleyc embeds the @{% import lexer %} preamble INSIDE the generated IIFE.
+// After collapsing the token-matcher ternaries below, the only remaining
+// reference to `lexer` is the grammar's `Lexer:` property -- which the parser
+// wrapper overrides at runtime by passing its own (whitespace-filtering)
+// lexer. So we drop both the embedded import and the `Lexer:` property here,
+// keeping the generated module free of any cross-project source dependency.
+content = content.replace(
+  /^[ \t]*import\s+[^\n;]+?from\s+["'][^"']+["'];[ \t]*\n/gm,
+  "",
+);
+console.log("✓ Removed embedded lexer import");
+
+// nearleyc emits token matchers as `(lexer.has("X") ? {type: "X"} : X)`. The
+// `: X` fallback references a bare identifier that does not exist in module
+// scope (it assumes a global token constant), which fails TypeScript's
+// type-check. Since the lexer always defines these tokens, collapse each
+// ternary to the plain `{type: "X"}` matcher.
+content = content.replace(
+  /\(lexer\.has\("([A-Za-z_][A-Za-z0-9_]*)"\)\s*\?\s*\{type:\s*"\1"\}\s*:\s*[A-Za-z_][A-Za-z0-9_]*\)/g,
+  '{type: "$1"}',
+);
+console.log("✓ Collapsed token matcher ternaries");
+
+// Drop the grammar's `Lexer:` property -- the wrapper supplies its own lexer
+// to the Parser at runtime, so this reference to the now-removed import would
+// otherwise be a dangling symbol.
+content = content.replace(/^[ \t]*Lexer:\s*lexer,[ \t]*\n/m, "");
+console.log("✓ Removed grammar Lexer property");
+
 // Restructure IIFE to make grammar accessible at module level FIRST (before other replacements)
 // This ensures we work with the original structure
 // Change: (function () { var grammar = {...}; ... })();
