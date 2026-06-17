@@ -351,7 +351,7 @@ export function convertMacro10ToK65(content: string): string {
    */
   function performReplacements(text: string, macroArgs: string[]): string {
     let current = text;
-    
+
     // Apply macro argument replacements first (only once to avoid recursion)
     for (const arg of macroArgs) {
       current = current.split(`<${arg}>`).join(`\\${arg}`);
@@ -359,7 +359,7 @@ export function convertMacro10ToK65(content: string): string {
       const argRegex = new RegExp(`(?<!\\\\)\\b${arg}\\b`, "g");
       current = current.replace(argRegex, `\\${arg}`);
     }
-    
+
     let changed = true;
     let iterations = 0;
     while (changed && iterations < 10) {
@@ -370,7 +370,7 @@ export function convertMacro10ToK65(content: string): string {
         "$1*$2",
       );
       current = current.replace(/%([A-Za-z0-9_]+)/g, "@$1");
-      current = current.replace(/^\s*\$([A-Za-z0-9_]+):/, "_$1:");
+      // current = current.replace(/^\s*\$([A-Za-z0-9_]+):/, "_$1:");
       current = current.replace(/\bLDAI\s+(.*)/, "LDA #$1");
       current = current.replace(/\bLDXI\s+(.*)/, "LDX #$1");
       current = current.replace(/\bLDYI\s+(.*)/, "LDY #$1");

@@ -130,7 +130,7 @@ export const lexer = moo.compile({
   // Identifiers (including @ prefix for local labels)
   IDENT: {
     // @ts-ignore: Moo type definitions conflict with RegExp
-    match: /@?[a-zA-Z_][a-zA-Z0-9_]*/,
+    match: /@?[a-zA-Z_$][a-zA-Z0-9_$]*/,
   },
 
   // Quoted strings (unescaped)

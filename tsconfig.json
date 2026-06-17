@@ -11,12 +11,8 @@
     "target": "esnext",
     // "types": [],
     // For nodejs:
-    "lib": [
-      "esnext"
-    ],
-    "types": [
-      "node"
-    ],
+    "lib": ["esnext"],
+    "types": ["node"],
     // and npm install -D @types/node
     // Other Outputs
     "sourceMap": true,
@@ -49,10 +45,5 @@
       "path": "./test"
     }
   ],
-  "exclude": [
-    "dist",
-    "node_modules",
-    "old",
-    "test"
-  ]
+  "exclude": ["dist", "node_modules", "old", "test"]
 }

@@ -16,9 +16,7 @@
     {
       "type": "npm",
       "script": "test-converter",
-      "problemMatcher": [
-        "$tsc"
-      ],
+      "problemMatcher": ["$tsc"],
       "label": "npm: test-converter",
       "detail": "npm run build && node --enable-source-maps test/converter.js",
       "presentation": {
