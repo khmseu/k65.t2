@@ -303,6 +303,19 @@ function normalizeSymbolsInLine(line) {
     return result;
 }
 /**
+ * The 6502 instruction mnemonics. Used to tell a real instruction apart from a
+ * bare value (an equate reference or constant expression) that MACRO-10 would
+ * emit as data.
+ */
+const MNEMONICS_6502 = new Set([
+    "LDA", "LDX", "LDY", "STA", "STX", "STY", "ADC", "SBC", "CMP", "CPX", "CPY",
+    "AND", "ORA", "EOR", "ASL", "LSR", "ROL", "ROR", "BIT", "INC", "DEC", "INX",
+    "DEX", "INY", "DEY", "BEQ", "BNE", "BCC", "BCS", "BMI", "BPL", "BVC", "BVS",
+    "JMP", "JSR", "RTS", "RTI", "BRK", "NOP", "CLC", "SEC", "CLD", "SED", "CLI",
+    "SEI", "CLV", "TAX", "TXA", "TAY", "TYA", "TSX", "TXS", "PHA", "PLA", "PHP",
+    "PLP",
+]);
+/**
  * Converts MACRO-10 assembler format to k65.t2 format.
  *
  * Takes MACRO-10 assembly source code (PDP-10 format) and converts it to
@@ -325,6 +338,14 @@ export function convertMacro10ToK65(content) {
     // Pass 2: No alias generation - symbols are truncated to 6 chars
     lines = uppercasedLines;
     const outLines = [];
+    // Collect every macro name defined via DEFINE so a bare macro call (no args)
+    // is not mistaken for a bare data value and rewritten to .byte.
+    const definedMacros = new Set();
+    for (const l of lines) {
+        const m = l.match(/^\s*DEFINE\s+([A-Za-z0-9_\$]+)/);
+        if (m)
+            definedMacros.add(normalizeSymbol(m[1]).toUpperCase());
+    }
     const blockStack = [];
     let angleDepth = 0;
     let inBlockComment = false;
@@ -472,6 +493,30 @@ export function convertMacro10ToK65(content) {
         const numRegex = new RegExp(`^(\\s*)(${numPart}(?:\\s*,\\s*${numPart})*)(\\s*(?:;.*)?)$`);
         if (numRegex.test(final)) {
             final = final.replace(numRegex, "$1.byte $2$3");
+            outLines.push(final);
+            return;
+        }
+        // 5. Standalone bare value (an equate reference or constant expression) ->
+        //    .byte. MACRO-10 emits a lone expression as data. We only do this when
+        //    the line is a single operator/identifier/number expression (no operand
+        //    whitespace) whose leading word is neither a 6502 mnemonic, a directive
+        //    (.xxx), nor a defined macro call.
+        const bareMatch = final.match(/^(\s*)(\S.*?)(\s*(?:;.*)?)$/);
+        if (bareMatch) {
+            const indent = bareMatch[1] ?? "";
+            const expr = bareMatch[2] ?? "";
+            const comment = bareMatch[3] ?? "";
+            const firstWord = (expr.match(/^[@A-Za-z_$][A-Za-z0-9_$]*/) ?? [""])[0].toUpperCase();
+            const exprNoStrings = expr.replace(/"(?:[^"\\]|\\.)*"/g, "");
+            const isExpression = /^[-+*/&|^<>()~%@A-Za-z0-9_$. \t"]+$/.test(expr) &&
+                !/\s/.test(exprNoStrings);
+            if (isExpression &&
+                !expr.startsWith(".") &&
+                !MNEMONICS_6502.has(firstWord) &&
+                !definedMacros.has(firstWord)) {
+                outLines.push(`${indent}.byte ${expr}${comment}`);
+                return;
+            }
         }
         outLines.push(final);
     }
