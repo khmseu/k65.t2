@@ -128,21 +128,25 @@ function processLinesRecursive(
               parsed.expression,
               state.symbolTable,
             );
-            recordMemo(
-              state,
-              options.file,
-              lineNum,
-              "if",
-              parsed.expression,
-              result.value,
-            );
+            
+            // Record memoized expression value (always record, even on errors)
+            if (result) {
+              recordMemo(
+                state,
+                options.file,
+                lineNum,
+                "if",
+                parsed.expression,
+                result.value,
+              );
+            }
 
-            if (!result.success) {
+            if (!result || !result.success) {
               addError(
                 state,
                 options.file,
                 lineNum,
-                `Invalid .if expression: ${result.error}`,
+                `Invalid .if expression: ${result?.error || "Unknown error"}`,
               );
               // Skip to matching .endif
               i = findMatchingEndif(lines, i) - 1;
@@ -174,21 +178,25 @@ function processLinesRecursive(
               parsed.expression,
               state.symbolTable,
             );
-            recordMemo(
-              state,
-              options.file,
-              lineNum,
-              "repeat",
-              parsed.expression,
-              result.value,
-            );
+            
+            // Record memoized expression value (always record, even on errors)
+            if (result) {
+              recordMemo(
+                state,
+                options.file,
+                lineNum,
+                "repeat",
+                parsed.expression,
+                result.value,
+              );
+            }
 
-            if (!result.success) {
+            if (!result || !result.success) {
               addError(
                 state,
                 options.file,
                 lineNum,
-                `Invalid .repeat expression: ${result.error}`,
+                `Invalid .repeat expression: ${result?.error || "Unknown error"}`,
               );
               i = findMatchingEndrepeat(lines, i) - 1;
             } else {

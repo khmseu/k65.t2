@@ -35,7 +35,11 @@ export function evaluateExpression(
     }
 
     // Try to tokenize and evaluate
-    const result = evaluateTokens(tokenize(trimmed), symbolTable);
+    const tokens = tokenize(trimmed);
+    const result = evaluateTokens(tokens, symbolTable);
+    if (!result) {
+      return { value: 0, success: false, error: "Internal error: no result from evaluateTokens" };
+    }
     return result;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -257,12 +261,16 @@ class Evaluator {
 
   private parseEquality(): number {
     let left = this.parseRelational();
-    const peekToken = this.peek();
-    while (
-      peekToken?.type === "operator" &&
-      typeof peekToken?.value === "string" &&
-      ["==", "!=", "<>"].includes(peekToken.value)
-    ) {
+    while (true) {
+      const peekToken = this.peek();
+      if (
+        !peekToken ||
+        peekToken.type !== "operator" ||
+        typeof peekToken.value !== "string" ||
+        !["==", "!=", "<>"].includes(peekToken.value)
+      ) {
+        break;
+      }
       const op = this.consume()!.value as string;
       const right = this.parseRelational();
       if (op === "==") {
@@ -276,12 +284,16 @@ class Evaluator {
 
   private parseRelational(): number {
     let left = this.parseShift();
-    const peekToken = this.peek();
-    while (
-      peekToken?.type === "operator" &&
-      typeof peekToken?.value === "string" &&
-      ["<", ">", "<=", ">="].includes(peekToken.value)
-    ) {
+    while (true) {
+      const peekToken = this.peek();
+      if (
+        !peekToken ||
+        peekToken.type !== "operator" ||
+        typeof peekToken.value !== "string" ||
+        !["<", ">", "<=", ">="].includes(peekToken.value)
+      ) {
+        break;
+      }
       const op = this.consume()!.value as string;
       const right = this.parseShift();
       if (op === "<") {
@@ -299,12 +311,16 @@ class Evaluator {
 
   private parseShift(): number {
     let left = this.parseAdditive();
-    const peekToken = this.peek();
-    while (
-      peekToken?.type === "operator" &&
-      typeof peekToken?.value === "string" &&
-      ["<<", ">>"].includes(peekToken.value)
-    ) {
+    while (true) {
+      const peekToken = this.peek();
+      if (
+        !peekToken ||
+        peekToken.type !== "operator" ||
+        typeof peekToken.value !== "string" ||
+        !["<<", ">>"].includes(peekToken.value)
+      ) {
+        break;
+      }
       const op = this.consume()!.value as string;
       const right = this.parseAdditive();
       if (op === "<<") {
