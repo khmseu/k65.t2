@@ -1,7 +1,5 @@
-import { notEqual } from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { assembleFile, printAssemblyResult } from "./assembler.js";
 import { exit } from "node:process";
-import { parseAssemblyLine } from "./ma6-parser-wrapper.js";
 
 const args = process.argv.slice(2);
 if (args.length === 0) {
@@ -10,26 +8,23 @@ if (args.length === 0) {
 }
 
 const filename = args[0];
-notEqual(filename, undefined, "Filename must be provided");
-if (filename !== undefined) {
-  // generateSyntaxDiagrams(fileURLToPath(import.meta.url));
-  // createDtsFromParser();
-  const content = readFileSync(filename, "utf-8");
-  const lines = content.split("\n");
+if (!filename) {
+  console.error("Filename must be provided");
+  process.exit(1);
+}
 
-  console.log("[");
-  let errs = 0;
-  for (const line of lines) {
-    const result = parseAssemblyLine(line);
-    // const short = in_short(result.ast);
-    console.log(JSON.stringify({ line, result }, null, 2), ",");
-    if (result.errors.length > 0) {
-      errs++;
-      if (errs > 10) {
-        console.log('"eof errs"]');
-        exit(1);
-      }
-    }
+try {
+  const result = assembleFile(filename);
+
+  // Print summary and output
+  console.log(printAssemblyResult(result));
+
+  // Exit with error code if there are errors
+  if (result.errors.length > 0) {
+    exit(1);
   }
-  console.log('"eof OK"]');
+} catch (e) {
+  const msg = e instanceof Error ? e.message : String(e);
+  console.error(`Fatal error: ${msg}`);
+  exit(1);
 }
