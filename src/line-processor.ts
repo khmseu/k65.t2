@@ -407,9 +407,10 @@ function parseDirective(line: string): ParsedLine | null {
     };
   }
 
-  // .equ NAME EXPR or NAME = EXPR
+  // .equ NAME EXPR or NAME = EXPR (the "=" form allows no surrounding
+  // whitespace, e.g. "REALIO=4"; "==" is a comparison, not an assignment)
   const equMatch = line.match(
-    /^([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\.equ|=)\s+(.+)$/i,
+    /^([a-zA-Z_@$][a-zA-Z0-9_@$.]*)\s*(?:\.equ\s+|=(?!=)\s*)(.+)$/i,
   );
   if (equMatch) {
     return {
