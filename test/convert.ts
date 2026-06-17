@@ -329,19 +329,23 @@ export function convertMacro10ToK65(content: string): string {
    */
   function performReplacements(text: string, macroArgs: string[]): string {
     let current = text;
+    
+    // Apply macro argument replacements first (only once to avoid recursion)
+    for (const arg of macroArgs) {
+      current = current.split(`<${arg}>`).join(`\${${arg}}`);
+      // Use negative lookahead/lookbehind to avoid replacing inside already-replaced ${...}
+      const argRegex = new RegExp(`(?<!\\$\\{)(?<!\\$)\\b${arg}\\b(?!\\})`, "g");
+      current = current.replace(argRegex, `\${${arg}}`);
+    }
+    
     let changed = true;
     let iterations = 0;
     while (changed && iterations < 10) {
       let start = current;
-      for (const arg of macroArgs) {
-        current = current.split(`<${arg}>`).join(`\${arg}`);
-        const argRegex = new RegExp(`(?<!\\\\)\\b${arg}\\b`, "g");
-        current = current.replace(argRegex, `\${arg}`);
-      }
       current = current.replace(/\^O([0-7]+)/g, "0o$1");
       current = current.replace(
         /(^|[^A-Za-z0-9_.])\.(\=|[^A-Za-z0-9_.]|$)/g,
-        "$1*",
+        "$1*$2",
       );
       current = current.replace(/%([A-Za-z0-9_]+)/g, "@$1");
       current = current.replace(/^\s*\$([A-Za-z0-9_]+):/, "_$1:");
