@@ -19,6 +19,8 @@ import type {
 import { ExpressionMemoStore } from "./assembler-types.js";
 import { evaluateExpression, unparseExpr } from "./expr-evaluator.js";
 import { findOpcode, getOpcodesByMnemonic } from "./6502-opcodes.js";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
   parseLine as parseLineNearley,
   type LineParseResult,
@@ -291,14 +293,38 @@ function processLinesRecursive(
           break;
 
         case "include":
-          if (parsed.file && includeDepth < maxDepth) {
+          if (parsed.file) {
             const filename = parsed.file;
-            // TODO: implement file loading
-            addError(
+            if (includeDepth >= maxDepth) {
+              addError(
+                state,
+                options.file,
+                lineNum,
+                `.include nesting too deep (> ${maxDepth}): ${filename}`,
+              );
+              break;
+            }
+            // Resolve relative to the directory of the including file.
+            const includePath = join(dirname(options.file), filename);
+            let includeContent: string;
+            try {
+              includeContent = readFileSync(includePath, "utf-8");
+            } catch {
+              addError(
+                state,
+                options.file,
+                lineNum,
+                `.include file not found: ${filename}`,
+              );
+              break;
+            }
+            const includeLines = includeContent.split(/\r?\n/);
+            processLinesRecursive(
+              includeLines,
               state,
-              options.file,
-              lineNum,
-              `.include not yet implemented: ${filename}`,
+              { ...options, file: includePath },
+              includeDepth + 1,
+              macroDepth,
             );
           }
           break;

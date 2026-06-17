@@ -1,3 +1,3 @@
-* 6502 opcode macros
+; 6502 opcode macros
 .pagesize 60
 .bytesperline 4

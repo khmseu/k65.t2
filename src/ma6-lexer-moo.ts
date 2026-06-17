@@ -35,6 +35,9 @@ export const lexer = moo.states({
     ElseIfDirective: /\.(?i:elseif)/,
     ElseDirective: /\.(?i:else)/,
     EndIfDirective: /\.(?i:endif)/,
+    // BytesPerLineDirective must precede ByteDirective so `.bytesperline` is not
+    // lexed as `.byte` followed by a stray `sperline`.
+    BytesPerLineDirective: /\.(?i:bytesperline)/,
     ByteDirective: /\.(?i:byte)/,
     WordDirective: /\.(?i:word)/,
     // TextcDirective must precede TextDirective so `.textc` is not lexed as
@@ -44,6 +47,9 @@ export const lexer = moo.states({
     FillDirective: /\.(?i:fill)/,
     ListDirective: /\.(?i:list)/,
     NoListDirective: /\.(?i:nolist)/,
+    // PageSizeDirective must precede PageDirective so `.pagesize` is not lexed
+    // as `.page` followed by a stray `size`.
+    PageSizeDirective: /\.(?i:pagesize)/,
     PageDirective: /\.(?i:page)/,
     EjectDirective: /\.(?i:eject)/,
     // These three carry free-form text: switch to the `freetext` state so the
@@ -51,10 +57,6 @@ export const lexer = moo.states({
     TitleDirective: { match: /\.(?i:title)/, push: "freetext" },
     SubttlDirective: { match: /\.(?i:subttl)/, push: "freetext" },
     PrintDirective: { match: /\.(?i:print)/, push: "freetext" },
-    PageSizeDirective: /\.(?i:pagesize)/,
-    BytesPerLineDirective: /\.(?i:bytesperline)/,
-
-    // Comparison operators (must come before single-char operators)
     EQ: /==/,
     NE: /!=|<>/,
     LE: /<=/,
