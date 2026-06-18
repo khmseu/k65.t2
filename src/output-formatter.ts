@@ -71,40 +71,22 @@ export function formatListing(
     eventsByAfter.get(ev.after)!.push(ev);
   }
 
-  // Listing-control state, with MACRO-10-ish defaults.
-  let title = "";
-  let subttl = "";
-  let pageSize = 60; // body lines per page; 0 disables automatic paging
+  // --- Phase 1: flatten the listing into a stream of body lines and control
+  // markers, without paginating. Byte-per-line wrapping and .list/.nolist
+  // suppression are resolved here; pagination and page headers are resolved in
+  // phase 2 so a page header can reflect a title/subtitle that appears partway
+  // down the page.
+  type Item =
+    | { kind: "body"; text: string }
+    | { kind: "title"; value: string }
+    | { kind: "subttl"; value: string }
+    | { kind: "page" }
+    | { kind: "pagesize"; value: number }
+    | { kind: "print"; text: string };
+
+  const items: Item[] = [];
   let bytesPerLine = 8; // object bytes shown per listing line
   let listEnabled = true; // .nolist suppresses body lines until .list
-  let pageNum = 0;
-  let lineOnPage = 0;
-  let needHeader = true; // emit a page header before the next body line
-
-  const startNewPage = () => {
-    pageNum++;
-    lineOnPage = 0;
-    lines.push("");
-    lines.push(title ? `Page ${pageNum}   ${title}` : `Page ${pageNum}`);
-    if (subttl) {
-      lines.push(`          ${subttl}`);
-    }
-    lines.push("-".repeat(80));
-  };
-
-  // Emit one body line, starting a new page first if a header is pending or the
-  // current page is full. No-op while listing is disabled.
-  const emitBody = (text: string) => {
-    if (!listEnabled) {
-      return;
-    }
-    if (needHeader || (pageSize > 0 && lineOnPage >= pageSize)) {
-      startNewPage();
-      needHeader = false;
-    }
-    lines.push(text);
-    lineOnPage++;
-  };
 
   const applyEvents = (idx: number) => {
     const evs = eventsByAfter.get(idx);
@@ -114,18 +96,17 @@ export function formatListing(
     for (const ev of evs) {
       switch (ev.type) {
         case "title":
-          title = ev.text ?? "";
-          needHeader = true; // a new title starts a new page
+          items.push({ kind: "title", value: ev.text ?? "" });
           break;
         case "subttl":
-          subttl = ev.text ?? ""; // updates the running subtitle
+          items.push({ kind: "subttl", value: ev.text ?? "" });
           break;
         case "page":
-          needHeader = true;
+          items.push({ kind: "page" });
           break;
         case "pagesize":
           if (ev.value && ev.value > 0) {
-            pageSize = ev.value;
+            items.push({ kind: "pagesize", value: ev.value });
           }
           break;
         case "bytesperline":
@@ -141,9 +122,15 @@ export function formatListing(
           break;
         case "print":
           // PRINTX-style message: always shown, independent of paging.
-          lines.push(`*** ${ev.text ?? ""}`);
+          items.push({ kind: "print", text: `*** ${ev.text ?? ""}` });
           break;
       }
+    }
+  };
+
+  const emitBody = (text: string) => {
+    if (listEnabled) {
+      items.push({ kind: "body", text });
     }
   };
 
@@ -197,6 +184,85 @@ export function formatListing(
 
   // Replay any trailing events that follow the last generated line.
   applyEvents(generated.length);
+
+  // --- Phase 2: group the item stream into pages. A `.title` starts a new page
+  // and a `.page` forces one; `.pagesize` changes the running page length. The
+  // header for each page uses the FIRST title/subtitle that lands on that page
+  // (falling back to the running value carried from earlier pages).
+  interface Page {
+    title?: string;
+    subttl?: string;
+    lines: string[];
+  }
+  const pages: Page[] = [];
+  let pageSize = 60; // body lines per page; 0 disables automatic paging
+  let runningTitle = "";
+  let runningSubttl = "";
+  let cur: Page = { lines: [] };
+  let open = false; // whether `cur` is the active page receiving content
+
+  // Finalize `cur`: a page with no title/subtitle of its own inherits the
+  // value running at the moment it is closed. Only non-empty pages are kept.
+  const finishPage = () => {
+    if (cur.lines.length > 0) {
+      cur.title ??= runningTitle;
+      cur.subttl ??= runningSubttl;
+      pages.push(cur);
+    }
+    cur = { lines: [] };
+    open = false;
+  };
+
+  for (const item of items) {
+    switch (item.kind) {
+      case "pagesize":
+        pageSize = item.value;
+        break;
+      case "page":
+        finishPage();
+        break;
+      case "title":
+        // The title belongs to the page being built; the first one on a page
+        // wins for that page's header. Page breaks come from `.page`/page fill.
+        runningTitle = item.value;
+        cur.title ??= item.value;
+        open = true;
+        break;
+      case "subttl":
+        // The subtitle belongs to the page being built; the first one on a
+        // page wins for that page's header.
+        runningSubttl = item.value;
+        cur.subttl ??= item.value;
+        open = true;
+        break;
+      case "body":
+      case "print":
+        if (!open || (pageSize > 0 && cur.lines.length >= pageSize)) {
+          finishPage();
+          open = true;
+        }
+        cur.lines.push(item.text);
+        break;
+    }
+  }
+  finishPage();
+
+  // --- Render the pages with their headers.
+  let pageNum = 0;
+  for (const page of pages) {
+    pageNum++;
+    const title = page.title ?? "";
+    const subttl = page.subttl ?? "";
+    lines.push("");
+    lines.push(title ? `Page ${pageNum}   ${title}` : `Page ${pageNum}`);
+    if (subttl) {
+      lines.push(`          ${subttl}`);
+    }
+    lines.push("-".repeat(80));
+    for (const text of page.lines) {
+      lines.push(text);
+    }
+  }
 
   lines.push("");
   lines.push("=".repeat(80));
