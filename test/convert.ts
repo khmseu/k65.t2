@@ -274,6 +274,22 @@ function normalizeSymbolsInLine(line: string): string {
   const isFreeTextKeyword = (w: string) =>
     /^(?:TITLE|SUBTTL|SUBTITLE|PRINTX|COMMENT)$/i.test(w);
 
+  // A token that directly follows a `^` and looks like O/D/B + digits is a
+  // MACRO-10 radix literal (`^O176547`, `^D10`, `^B1010`), NOT a symbol, so it
+  // must never be truncated to 6 chars (that was dropping the final octal digit
+  // of 6-digit values like ^O176547 -> O17654).
+  const isRadixLiteral = (tok: string) =>
+    result.endsWith("^") && /^[ODB][0-9]+$/i.test(tok);
+
+  // Emit the accumulated token, normalizing it only when it is a real symbol.
+  const flush = () => {
+    if (current && /^[A-Za-z_%@]/.test(current[0]!) && !isRadixLiteral(current)) {
+      result += normalizeSymbol(current);
+    } else {
+      result += current;
+    }
+  };
+
   for (let i = 0; i < line.length; i++) {
     const ch = line[i]!;
 
@@ -285,11 +301,7 @@ function normalizeSymbolsInLine(line: string): string {
 
     if (ch === '"' || ch === "'" || ch === "/") {
       // Flush any accumulated symbol before entering a string
-      if (current && /^[A-Za-z_%@]/.test(current[0]!)) {
-        result += normalizeSymbol(current);
-      } else {
-        result += current;
-      }
+      flush();
       current = "";
       inString = true;
       stringChar = ch;
@@ -322,22 +334,14 @@ function normalizeSymbolsInLine(line: string): string {
         continue;
       }
       // Only normalize if it looks like a symbol (not empty, and valid)
-      if (current && /^[A-Za-z_%@]/.test(current[0]!)) {
-        result += normalizeSymbol(current);
-      } else {
-        result += current;
-      }
+      flush();
       result += ch;
       current = "";
     }
   }
 
   // Final symbol
-  if (current && /^[A-Za-z_%@]/.test(current[0]!)) {
-    result += normalizeSymbol(current);
-  } else {
-    result += current;
-  }
+  flush();
   return result;
 }
 
