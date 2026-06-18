@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
-    "rootDir": "../",
+    "rootDir": ".",
     "outDir": "../../dist",
-    "composite": true,
+    "composite": false,
     "module": "nodenext",
     "target": "esnext",
     "lib": ["esnext"],

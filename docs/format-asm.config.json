@@ -1,0 +1,10 @@
+{
+  "columnWidths": {
+    "label": 9,
+    "operation": 8,
+    "arguments": 32,
+    "comment": 50
+  },
+  "collapseBlankLines": true,
+  "normalizeExpressions": true
+}
