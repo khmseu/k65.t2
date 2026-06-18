@@ -283,7 +283,11 @@ function normalizeSymbolsInLine(line: string): string {
 
   // Emit the accumulated token, normalizing it only when it is a real symbol.
   const flush = () => {
-    if (current && /^[A-Za-z_%@]/.test(current[0]!) && !isRadixLiteral(current)) {
+    if (
+      current &&
+      /^[A-Za-z_%@]/.test(current[0]!) &&
+      !isRadixLiteral(current)
+    ) {
       result += normalizeSymbol(current);
     } else {
       result += current;
