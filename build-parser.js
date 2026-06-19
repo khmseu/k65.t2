@@ -101,8 +101,5 @@ if (content.includes(commonJsBlock)) {
   console.log("⚠ Could not find CommonJS export block to replace");
 }
 
-// Add @ts-nocheck to the beginning of the generated file to suppress type errors
-content = "// @ts-nocheck\n" + content;
-
 writeFileSync(generatedFile, content);
 console.log("✓ Generated parser updated");

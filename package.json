@@ -10,7 +10,7 @@
     "build": "npm run nearleyc && npm run tsc",
     "nearleyc": "node build-parser.js",
     "test": "npm run build && echo starting... && node --enable-source-maps dist/index.js test/m6502.converted.asm > test/m6502.converted.json; echo done rc=$?",
-    "tsc": "tsc",
+    "tsc": "tsc --build",
     "test-converter": "npm run build && node --enable-source-maps test/convert.js test/m6502.asm test/m6502.converted.asm",
     "format": "npm run build && node --enable-source-maps dist/format-asm.js"
   },

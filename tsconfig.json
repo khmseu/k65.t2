@@ -4,7 +4,7 @@
     // File Layout
     "rootDir": "./src",
     "outDir": "./dist",
-    "composite": false,
+    "composite": true,
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
     "module": "nodenext",
@@ -37,6 +37,13 @@
     "moduleDetection": "force",
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules", "old", "test", "src/generated"]
+  "references": [
+    {
+      "path": "./src/generated"
+    },
+    {
+      "path": "./test"
+    }
+  ],
+  "exclude": ["dist", "node_modules", "old", "test"]
 }
