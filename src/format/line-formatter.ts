@@ -135,11 +135,14 @@ export function formatLine(
       comment: "",
       isBlank: true,
       isComment: false,
+      commentAtMargin: false,
       originalLineNumber: lineNumber,
     };
   }
 
-  // Comment-only line: no code, comment present.
+  // Comment-only line: no code, comment present. A `;` in the very first column
+  // is a margin comment (kept at the left edge); an indented `;` is treated as
+  // a trailing comment with no code and is moved to the shared comment column.
   if (contentWithoutComment === "") {
     return {
       label: "",
@@ -148,6 +151,7 @@ export function formatLine(
       comment,
       isBlank: false,
       isComment: true,
+      commentAtMargin: idx === 0,
       originalLineNumber: lineNumber,
     };
   }
@@ -162,6 +166,7 @@ export function formatLine(
       comment,
       isBlank: false,
       isComment: false,
+      commentAtMargin: false,
       raw: source.replace(/\s+$/, ""),
       originalLineNumber: lineNumber,
     };
@@ -203,6 +208,7 @@ export function formatLine(
     comment,
     isBlank: false,
     isComment: false,
+    commentAtMargin: false,
     originalLineNumber: lineNumber,
   };
 }

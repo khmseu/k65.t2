@@ -21,6 +21,12 @@ export interface FormattedLine {
   /** True for comment-only lines (no code, comment present). */
   isComment: boolean;
   /**
+   * For comment-only lines: true when the comment's `;` began in the first
+   * column of the source. Such comments are kept at the left margin; indented
+   * comment-only lines are moved to the shared comment column instead.
+   */
+  commentAtMargin: boolean;
+  /**
    * Verbatim source for lines that could not be parsed. When set, the line is
    * rendered as-is to avoid silently dropping content.
    */

@@ -136,9 +136,19 @@ function renderLines(lines: FormattedLine[], widths: ColumnWidths): string[] {
       continue;
     }
 
-    // Comment-only lines stay at the left margin as full-line comments.
+    // Comment-only lines: a margin comment (started in the first column) stays
+    // at the left edge; an indented comment-only line is aligned to the shared
+    // comment column, like a trailing comment on an empty code line.
     if (line.isComment) {
-      output.push(`; ${line.comment}`);
+      if (line.commentAtMargin) {
+        output.push(`; ${line.comment}`);
+      } else {
+        const indent =
+          " ".repeat(widths.label + widths.operation + widths.arguments) +
+          "; " +
+          line.comment;
+        output.push(indent.trimEnd());
+      }
       continue;
     }
 
