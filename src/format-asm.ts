@@ -79,7 +79,9 @@ function readAndParseLines(filePath: string): FormattedLine[] {
     formattedLines.push(formatted);
 
     if (parseResult.error) {
-      console.warn(`Line ${sourceLineNum}: ${parseResult.error}`);
+      console.warn(
+        `Line ${sourceLineNum}: ${parseResult.error}\n  > ${source}`,
+      );
     }
   }
 
