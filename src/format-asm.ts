@@ -138,14 +138,16 @@ function renderLines(lines: FormattedLine[], widths: ColumnWidths): string[] {
 
     // Comment-only lines: a margin comment (started in the first column) stays
     // at the left edge; an indented comment-only line is aligned to the shared
-    // comment column, like a trailing comment on an empty code line.
+    // comment column, like a trailing comment on an empty code line. The
+    // comment body keeps its original spacing after the `;`, so `;` is prefixed
+    // directly with no injected separator.
     if (line.isComment) {
       if (line.commentAtMargin) {
-        output.push(`; ${line.comment}`);
+        output.push(`;${line.comment}`);
       } else {
         const indent =
           " ".repeat(widths.label + widths.operation + widths.arguments) +
-          "; " +
+          ";" +
           line.comment;
         output.push(indent.trimEnd());
       }
@@ -159,9 +161,10 @@ function renderLines(lines: FormattedLine[], widths: ColumnWidths): string[] {
     formatted += padColumn(line.arguments, widths.arguments);
 
     // Append comment. The padded argument column already guarantees a space of
-    // separation before the comment.
+    // separation before the `;`; the comment body keeps its original spacing
+    // after the `;`, so no separator is injected here.
     if (line.comment) {
-      formatted += "; " + line.comment;
+      formatted += ";" + line.comment;
     }
 
     output.push(formatted.trimEnd());

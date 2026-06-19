@@ -8,15 +8,19 @@ import { reconstructExpression } from "./expr-reconstructor.js";
 import { reconstructOperand } from "./operand-reconstructor.js";
 
 /**
- * Extract the end-of-line comment from a raw source line.
- * Comments start at the first `;` and run to end of line.
+ * Extract the end-of-line comment body from a raw source line.
+ *
+ * Comments start at the first `;` and run to end of line. The body is the text
+ * after the `;` with trailing whitespace removed but leading whitespace (the
+ * spacing/tabs between the `;` and the first non-blank character) preserved, so
+ * the renderer can reproduce the author's original indentation verbatim.
  */
 function extractComment(source: string): string {
   const idx = source.indexOf(";");
   if (idx === -1) {
     return "";
   }
-  return source.slice(idx + 1).trim();
+  return source.slice(idx + 1).replace(/\s+$/, "");
 }
 
 /**
