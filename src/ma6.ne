@@ -276,21 +276,21 @@ unaryExpr ->
 
 primary ->
     %DECNUM
-      {% d => ({ t: "num", v: d[0].value }) %}
+      {% d => ({ t: "num", v: d[0].value, raw: d[0].text }) %}
   | %HEXNUM
-      {% d => ({ t: "num", v: d[0].value }) %}
+      {% d => ({ t: "num", v: d[0].value, raw: d[0].text }) %}
   | %OCTNUM
-      {% d => ({ t: "num", v: d[0].value }) %}
+      {% d => ({ t: "num", v: d[0].value, raw: d[0].text }) %}
   | %BINNUM
-      {% d => ({ t: "num", v: d[0].value }) %}
+      {% d => ({ t: "num", v: d[0].value, raw: d[0].text }) %}
   | %CHAR
-      {% d => ({ t: "num", v: String(d[0].value).charCodeAt(0) }) %}
+      {% d => ({ t: "num", v: String(d[0].value).charCodeAt(0), raw: d[0].text }) %}
   | %STRING
-      {% d => ({ t: "num", v: String(d[0].value).charCodeAt(0) }) %}
+      {% d => ({ t: "num", v: String(d[0].value).charCodeAt(0), raw: d[0].text }) %}
   | %IDENT
       {% d => ({ t: "sym", name: d[0].value }) %}
   | %ESCAPE %IDENT
-      {% d => ({ t: "sym", name: d[1].value }) %}
+      {% d => ({ t: "sym", name: d[1].value, escaped: true }) %}
   | %STAR
       {% () => ({ t: "pc" }) %}
   | %LPAREN expr %RPAREN

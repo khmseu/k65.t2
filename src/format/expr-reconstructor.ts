@@ -11,7 +11,13 @@ import type { ExprNode } from "../assembler-types.js";
  */
 export function reconstructExpression(expr: ExprNode): string {
   if (expr.t === "num") {
-    // Numeric literal: format as hex if >= 256, else decimal
+    // Prefer the original literal text so the author's chosen base/form (hex,
+    // octal, decimal, char) is preserved rather than re-based.
+    if (expr.raw !== undefined && expr.raw !== "") {
+      return expr.raw;
+    }
+    // Fallback (synthesized nodes with no source text): format as hex if
+    // >= 256, else decimal.
     const v = expr.v;
     if (v >= 256 || v < 0) {
       return `$${v.toString(16).toUpperCase().padStart(4, "0")}`;
@@ -20,8 +26,9 @@ export function reconstructExpression(expr: ExprNode): string {
   }
 
   if (expr.t === "sym") {
-    // Symbol reference: preserve name as-is
-    return expr.name;
+    // Symbol reference: preserve the leading backslash for `\IDENT`
+    // macro-parameter references.
+    return expr.escaped ? `\\${expr.name}` : expr.name;
   }
 
   if (expr.t === "pc") {

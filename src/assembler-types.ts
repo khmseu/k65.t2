@@ -242,8 +242,13 @@ export type DirectiveType =
 
 /** Expression AST node, as emitted by ma6.ne. */
 export type ExprNode =
-  | { t: "num"; v: number }
-  | { t: "sym"; name: string }
+  // `raw` preserves the original literal text (base, casing, char/string form)
+  // so tools like the source formatter can reproduce it without re-basing.
+  | { t: "num"; v: number; raw?: string }
+  // `escaped` marks a `\IDENT` macro-parameter reference; the backslash is kept
+  // out of `name` (which the assembler uses for lookup) but recorded so tools
+  // can reproduce the original source.
+  | { t: "sym"; name: string; escaped?: boolean }
   | { t: "pc" }
   | { t: "bin"; op: string; l: ExprNode; r: ExprNode }
   | { t: "un"; op: string; e: ExprNode };
