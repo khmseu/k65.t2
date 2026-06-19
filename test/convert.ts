@@ -538,10 +538,18 @@ export function convertMacro10ToK65(content: string): string {
         const semi = current.indexOf(";");
         const code = semi >= 0 ? current.slice(0, semi) : current;
         const rest = semi >= 0 ? current.slice(semi) : "";
+        // A value below the radix (0-7 in octal) is identical in decimal, so
+        // it is emitted bare; only multi-digit octal gets a `0o` prefix.
         current =
-          code.replace(/(?<![\w.$@^\\])[0-7]+\b/g, (d) => `0o${d}`) + rest;
+          code.replace(/(?<![\w.$@^\\])[0-7]+\b/g, (d) =>
+            parseInt(d, 8) < 8 ? String(parseInt(d, 8)) : `0o${d}`,
+          ) + rest;
       }
-      current = current.replace(/\^O([0-7]+)/g, "0o$1");
+      // Explicit octal `^O...`: a single-digit value (0-7) is the same in
+      // decimal, so drop the prefix; larger values keep `0o`.
+      current = current.replace(/\^O([0-7]+)/g, (_m, oct) =>
+        parseInt(oct, 8) < 8 ? String(parseInt(oct, 8)) : `0o${oct}`,
+      );
       // MACRO-10 radix prefixes: ^D = decimal, ^B = binary
       current = current.replace(/\^D([0-9]+)/g, "$1");
       current = current.replace(/\^B([01]+)/g, "0b$1");
@@ -599,7 +607,7 @@ export function convertMacro10ToK65(content: string): string {
       );
       current = current.replace(/([\\@A-Za-z0-9_\$]+)\s*==\s*(.*)/, "$1 = $2");
       current = current.replace(
-        /\bPRINTX\s*([^\sA-Za-z0-9])(.*)\\1/g,
+        /\bPRINTX\s*([^\sA-Za-z0-9])(.*)\1/g,
         ".print $2",
       );
       current = current.replace(/^\s*PRINTX\s+([^\/"\s>][^>]*)/, ".print $1");
@@ -648,7 +656,7 @@ export function convertMacro10ToK65(content: string): string {
     let current = text;
     // 1. Iteratively extract labels from the segment
     while (true) {
-      const labelMatch = current.match(/^(\s*)([\@A-Za-z0-9_\$]+)::?(.*)/);
+      const labelMatch = current.match(/^(\s*)([\@A-Za-z0-9_\$]+)::?!?(.*)/);
       if (!labelMatch) break;
       const indent = labelMatch[1] ?? "";
       const labelName = labelMatch[2] ?? "";
@@ -774,7 +782,7 @@ export function convertMacro10ToK65(content: string): string {
         lastBlock && lastBlock.type === "macro" ? lastBlock.args : [];
 
       // 1. Extract Labels (at start of line)
-      const labelMatch = line.match(/^(\s*)([\@A-Za-z0-9_\$]+)::?(.*)/);
+      const labelMatch = line.match(/^(\s*)([\@A-Za-z0-9_\$]+)::?!?(.*)/);
       if (labelMatch) {
         finalizeAndPush(
           (labelMatch[1] ?? "") + (labelMatch[2] ?? "") + ":",
