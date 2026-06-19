@@ -678,6 +678,19 @@ export function convertMacro10ToK65(content: string): string {
     final = final.replace(/,(\s*)(;.*)?$/, "$1$2").trimEnd();
     if (!final && !text.includes(";")) return;
 
+    // 2b. PDP-10 system external reference (e.g. `HRRZ 14,.JBDDT##`). A
+    // dot-prefixed symbol carrying the `##` global marker is a PDP-10
+    // JOBDAT/monitor location that has no 6502 equivalent and can never be
+    // defined, so the whole statement is preserved as a comment instead of
+    // being emitted as code the assembler cannot parse. Plain (non-dotted)
+    // `##` externals such as `INSIM##`/`OUTSIM##` are user symbols and are
+    // left untouched.
+    if (/\.[A-Za-z][A-Za-z0-9]*##/.test(final)) {
+      const indent = (final.match(/^\s*/) ?? [""])[0];
+      outLines.push(`${indent}; ${final.trim()}`);
+      return;
+    }
+
     // 3. Standalone string literal -> .byte (single char) or .text (multi-char)
     const stringMatch = final.match(/^(\s*)"(.*?)"(\s*(?:;.*)?)$/);
     if (stringMatch) {
