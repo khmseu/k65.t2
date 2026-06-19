@@ -13,14 +13,16 @@ A standalone CLI tool for formatting 6502 assembly source code with aligned fixe
 
 ## Usage
 
-### Basic usage (auto-detect column widths):
+### Basic usage (auto-detect column widths)
+
 ```bash
 npm run format input.asm [output.asm]
 ```
 
 Without output file, writes to stdout.
 
-### With custom configuration:
+### With custom configuration
+
 ```bash
 npm run format input.asm output.asm --config format-asm.config.json
 ```
@@ -28,6 +30,7 @@ npm run format input.asm output.asm --config format-asm.config.json
 ## Configuration File Format
 
 `format-asm.config.json` example:
+
 ```json
 {
   "columnWidths": {
@@ -60,7 +63,8 @@ Set to 0 for auto-detection of that column.
 Lines are formatted as: `label | operation | arguments | comment`
 
 Example:
-```
+
+```6502
 SETUP       LDA        #$00                        ; Initialize accumulator
             STA        COUNTER                     ; Store to counter
             RTS                                     ; Return

@@ -111,10 +111,7 @@ function collapseBlankLines(lines: FormattedLine[]): FormattedLine[] {
 /**
  * Render formatted lines with fixed-width columns.
  */
-function renderLines(
-  lines: FormattedLine[],
-  widths: ColumnWidths,
-): string[] {
+function renderLines(lines: FormattedLine[], widths: ColumnWidths): string[] {
   const output: string[] = [];
 
   for (const line of lines) {
@@ -153,7 +150,9 @@ async function main() {
 
   // Collapse consecutive blanks
   const collapsed = collapseBlankLines(formattedLines);
-  console.error(`Collapsed blank lines: ${formattedLines.length} → ${collapsed.length} lines.`);
+  console.error(
+    `Collapsed blank lines: ${formattedLines.length} → ${collapsed.length} lines.`,
+  );
 
   // Load or auto-detect column widths
   let widths: ColumnWidths;
