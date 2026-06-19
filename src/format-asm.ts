@@ -109,6 +109,16 @@ function collapseBlankLines(lines: FormattedLine[]): FormattedLine[] {
 }
 
 /**
+ * Pad a column value to the given width, always leaving at least one trailing
+ * space so adjacent columns never run together when a value fills or overflows
+ * its column.
+ */
+function padColumn(value: string, width: number): string {
+  const padded = value.padEnd(width);
+  return padded.endsWith(" ") ? padded : padded + " ";
+}
+
+/**
  * Render formatted lines with fixed-width columns.
  */
 function renderLines(lines: FormattedLine[], widths: ColumnWidths): string[] {
@@ -120,13 +130,26 @@ function renderLines(lines: FormattedLine[], widths: ColumnWidths): string[] {
       continue;
     }
 
-    // Pad each column to its width, then concatenate
-    let formatted = "";
-    formatted += line.label.padEnd(widths.label);
-    formatted += line.operation.padEnd(widths.operation);
-    formatted += line.arguments.padEnd(widths.arguments);
+    // Lines that failed to parse are preserved verbatim.
+    if (line.raw !== undefined) {
+      output.push(line.raw);
+      continue;
+    }
 
-    // Append comment (no padding needed for last column)
+    // Comment-only lines stay at the left margin as full-line comments.
+    if (line.isComment) {
+      output.push(`; ${line.comment}`);
+      continue;
+    }
+
+    // Pad each column to its width (always keeping a separating space).
+    let formatted = "";
+    formatted += padColumn(line.label, widths.label);
+    formatted += padColumn(line.operation, widths.operation);
+    formatted += padColumn(line.arguments, widths.arguments);
+
+    // Append comment. The padded argument column already guarantees a space of
+    // separation before the comment.
     if (line.comment) {
       formatted += "; " + line.comment;
     }

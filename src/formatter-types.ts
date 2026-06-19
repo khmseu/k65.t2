@@ -16,7 +16,15 @@ export interface FormattedLine {
   operation: string;
   arguments: string;
   comment: string;
+  /** True only for truly empty lines (no code and no comment). */
   isBlank: boolean;
+  /** True for comment-only lines (no code, comment present). */
+  isComment: boolean;
+  /**
+   * Verbatim source for lines that could not be parsed. When set, the line is
+   * rendered as-is to avoid silently dropping content.
+   */
+  raw?: string | undefined;
   originalLineNumber: number;
 }
 

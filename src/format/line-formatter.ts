@@ -120,20 +120,54 @@ export function formatLine(
 ): FormattedLine {
   const comment = extractComment(source);
 
-  // Check if line is blank or comment-only
-  const contentWithoutComment = (source.split(";")[0] ?? "").trim();
-  if (!ast || contentWithoutComment === "") {
+  // Determine the code portion (everything before the first `;`).
+  const idx = source.indexOf(";");
+  const contentWithoutComment = (
+    idx === -1 ? source : source.slice(0, idx)
+  ).trim();
+
+  // Truly blank line: no code and no comment.
+  if (contentWithoutComment === "" && comment === "") {
     return {
       label: "",
       operation: "",
       arguments: "",
-      comment: comment,
+      comment: "",
       isBlank: true,
+      isComment: false,
       originalLineNumber: lineNumber,
     };
   }
 
-  const label = ast.label || "";
+  // Comment-only line: no code, comment present.
+  if (contentWithoutComment === "") {
+    return {
+      label: "",
+      operation: "",
+      arguments: "",
+      comment,
+      isBlank: false,
+      isComment: true,
+      originalLineNumber: lineNumber,
+    };
+  }
+
+  // Line has code but failed to parse: preserve it verbatim so no content is
+  // silently dropped. The caller still reports the parse error separately.
+  if (!ast) {
+    return {
+      label: "",
+      operation: "",
+      arguments: "",
+      comment,
+      isBlank: false,
+      isComment: false,
+      raw: source.replace(/\s+$/, ""),
+      originalLineNumber: lineNumber,
+    };
+  }
+
+  let label = ast.label || "";
   let operation = "";
   let args = "";
 
@@ -152,11 +186,13 @@ export function formatLine(
       operation = `.${directive.name}`;
       args = reconstructDirectiveArgs(directive);
     } else if (stmt.kind === "assign") {
-      // Assignment: NAME = EXPR
+      // Assignment: NAME = EXPR. The assigned symbol belongs in the label
+      // column, with `=` as the operation and the value as the argument.
       const assign = stmt as any; // Cast to assign type
+      label = label || assign.name;
       operation = "=";
       const value = assign.value || ({ t: "num", v: 0 } as any);
-      args = `${assign.name} ${reconstructExpression(value)}`;
+      args = reconstructExpression(value);
     }
   }
 
@@ -166,6 +202,7 @@ export function formatLine(
     arguments: args,
     comment,
     isBlank: false,
+    isComment: false,
     originalLineNumber: lineNumber,
   };
 }
