@@ -159,6 +159,29 @@ function processLinesRecursive(
     };
     state.listing.push(listingEntry);
 
+    // Define a label that appears on this line. A label takes the value of the
+    // location counter at the START of the line, so it must be set BEFORE any
+    // bytes are emitted by an instruction or data directive on the same line.
+    // This makes `LABEL: .word ...`, `LABEL: .byte ...` and `LABEL: LDA #1`
+    // define LABEL exactly like a standalone `LABEL:` line, so a forward
+    // reference from a directive argument (e.g. `.word LABEL - 1`) resolves
+    // through the same multi-pass mechanism as an instruction operand.
+    //
+    // Excluded: `equ`/`set`/assignment (the label names a constant, defined
+    // below with its computed value) and `.macro` (the label names the macro).
+    const labelNamesConstantOrMacro =
+      parsed.type === "directive" &&
+      (parsed.directive === "equ" ||
+        parsed.directive === "set" ||
+        parsed.directive === "macro");
+    if (parsed.label && !labelNamesConstantOrMacro) {
+      state.symbolTable.set(parsed.label, {
+        name: parsed.label,
+        type: "label",
+        address: state.pc,
+      });
+    }
+
     // Handle directives
     if (parsed.type === "directive" && parsed.directive) {
       switch (parsed.directive) {
@@ -572,15 +595,6 @@ function processLinesRecursive(
         parsed.error ?? "Could not parse line",
       );
       continue;
-    }
-
-    // Handle labels
-    if (parsed.label && parsed.type === "label") {
-      state.symbolTable.set(parsed.label, {
-        name: parsed.label,
-        type: "label",
-        address: state.pc,
-      });
     }
 
     // Handle instructions
