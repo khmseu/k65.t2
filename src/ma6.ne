@@ -23,6 +23,18 @@ import lexer from "../ma6-lexer-moo.js";
 # A line is an optional label followed by an optional statement. The wrapper
 # never feeds a fully-empty line, but "label only", "statement only" and
 # "label statement" (e.g. "FOO: LDA #1") are all valid.
+#
+# The colon after a label is optional ONLY when an instruction/directive/
+# assignment follows (the `%IDENT statement` alternative below). A bare label
+# on its own line still REQUIRES the colon, because without it the line is
+# indistinguishable from a no-operand instruction (e.g. `RTS`).
+#
+# A colon-less label is genuinely ambiguous with `MNEMONIC operand` (e.g.
+# `STA FACMOH` is both "instruction STA, operand FACMOH" and "label STA,
+# instruction FACMOH"). The grammar emits both parses and tags the colon-less
+# one with `noColonLabel: true`; the wrapper prefers the statement-only parse
+# when both are present, so a colon-less label only wins when the line cannot
+# parse as a single statement (e.g. `FOO LDA #1`).
 
 line ->
     label
@@ -31,6 +43,8 @@ line ->
       {% d => ({ label: null, stmt: d[0] }) %}
   | label statement
       {% d => ({ label: d[0], stmt: d[1] }) %}
+  | %IDENT statement
+      {% d => ({ label: d[0].value, stmt: d[1], noColonLabel: true }) %}
 
 label ->
     %IDENT %COLON

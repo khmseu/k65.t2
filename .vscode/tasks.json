@@ -8,9 +8,7 @@
         "focus": true,
         "reveal": "always"
       },
-      "problemMatcher": [
-        "$tsc"
-      ],
+      "problemMatcher": ["$tsc"],
       "script": "test",
       "type": "npm"
     },
@@ -21,9 +19,7 @@
         "focus": true,
         "reveal": "always"
       },
-      "problemMatcher": [
-        "$tsc"
-      ],
+      "problemMatcher": ["$tsc"],
       "script": "test-converter",
       "type": "npm"
     },
@@ -34,9 +30,7 @@
         "focus": true,
         "reveal": "always"
       },
-      "problemMatcher": [
-        "$tsc"
-      ],
+      "problemMatcher": ["$tsc"],
       "script": "test-assemble",
       "type": "npm"
     },
@@ -47,9 +41,7 @@
         "focus": true,
         "reveal": "always"
       },
-      "problemMatcher": [
-        "$tsc"
-      ],
+      "problemMatcher": ["$tsc"],
       "script": "test-format",
       "type": "npm"
     },
@@ -60,9 +52,7 @@
         "focus": true,
         "reveal": "always"
       },
-      "problemMatcher": [
-        "$tsc"
-      ],
+      "problemMatcher": ["$tsc"],
       "script": "test-both",
       "type": "npm"
     }

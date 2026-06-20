@@ -10,6 +10,7 @@ grammar = {
     {"name": "line", "symbols": ["label"], "postprocess": d => ({ label: d[0], stmt: null })},
     {"name": "line", "symbols": ["statement"], "postprocess": d => ({ label: null, stmt: d[0] })},
     {"name": "line", "symbols": ["label", "statement"], "postprocess": d => ({ label: d[0], stmt: d[1] })},
+    {"name": "line", "symbols": [{type: "IDENT"}, "statement"], "postprocess": d => ({ label: d[0].value, stmt: d[1], noColonLabel: true })},
     {"name": "label", "symbols": [{type: "IDENT"}, {type: "COLON"}], "postprocess": d => d[0].value},
     {"name": "statement", "symbols": ["directive"], "postprocess": id},
     {"name": "statement", "symbols": ["assignment"], "postprocess": id},

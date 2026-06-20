@@ -182,7 +182,18 @@ export function parseLine(line: string): LineParseResult {
       tokens,
     };
   }
-  return { ast: results[0] as LineAst, empty: false, source: stripped, tokens };
+  // A colon-less label (the grammar's `%IDENT statement` alternative) is
+  // ambiguous with `MNEMONIC operand` (e.g. `STA FACMOH`). The grammar tags
+  // those parses with `noColonLabel`; prefer any parse without that tag so a
+  // colon-less label only wins when the line cannot parse as a single
+  // statement (e.g. `FOO LDA #1`). The internal tag is stripped before return.
+  const chosen =
+    results.find((r) => !(r as { noColonLabel?: boolean })?.noColonLabel) ??
+    results[0];
+  if (chosen && "noColonLabel" in (chosen as object)) {
+    delete (chosen as { noColonLabel?: boolean }).noColonLabel;
+  }
+  return { ast: chosen as LineAst, empty: false, source: stripped, tokens };
 }
 
 /** Lex a (comment-stripped) line, discarding whitespace tokens. */

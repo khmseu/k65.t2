@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#
+# k65fmt - drive the 6502 assembly source formatter
+#
+# Usage: k65fmt <input-file> [output-file] [--config <config-file>]
+#
+# Locates the installed k65 package (its dist/ directory) and runs the
+# formatter entry point with node.
+#
+# The package location is resolved in this order:
+#   1. $K65_HOME, if set
+#   2. relative to this script (development checkout: <repo>/dist)
+#   3. common install prefixes (/usr/local/lib/k65, /opt/k65)
+
+set -euo pipefail
+
+find_home() {
+  if [[ -n "${K65_HOME:-}" ]]; then
+    printf '%s\n' "$K65_HOME"
+    return 0
+  fi
+
+  # Resolve the real path of this script, following symlinks.
+  local src="${BASH_SOURCE[0]}"
+  while [[ -h "$src" ]]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  local script_dir
+  script_dir="$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)"
+
+  local candidate
+  for candidate in "$script_dir/.." /usr/local/lib/k65 /opt/k65; do
+    if [[ -f "$candidate/dist/format-asm.js" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+if ! home="$(find_home)"; then
+  echo "k65fmt: cannot locate the k65 package; set K65_HOME to its directory" >&2
+  exit 1
+fi
+
+exec node "$home/dist/format-asm.js" "$@"
