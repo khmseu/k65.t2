@@ -904,9 +904,11 @@ function encodeInstruction(
 ): { bytes: number[]; target?: number } | null {
   const M = mnemonic.toUpperCase();
 
-  // No operand -> implied.
+  // No operand -> implied. Shift/rotate mnemonics (ASL/LSR/ROL/ROR) have no
+  // implied form but accept the accumulator implicitly, so `ASL` is treated as
+  // shorthand for `ASL A` by falling back to the accumulator opcode.
   if (!operand) {
-    const opcode = findOpcode(M, "implied");
+    const opcode = findOpcode(M, "implied") ?? findOpcode(M, "accumulator");
     if (!opcode) {
       addError(state, file, lineNum, `Unknown instruction: ${mnemonic}`);
       return null;

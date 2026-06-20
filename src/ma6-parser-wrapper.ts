@@ -88,13 +88,29 @@ export interface LineParseResult {
 }
 
 /**
- * Strip an end-of-line comment. Comments start at the first `;` and run to the
- * end of the line regardless of any open parentheses (project rule: every
- * comment runs to the end of the line; a `;` always terminates the line).
+ * Strip an end-of-line comment. A comment starts at the first `;` that is not
+ * inside a string (`"..."`) or character (`'...'`) literal and runs to the end
+ * of the line (project rule: every comment runs to the end of the line; a `;`
+ * always terminates the line). A `;` inside a quoted literal is data, not a
+ * comment, so literals are scanned (honoring `\` escapes) and skipped.
  */
 function stripLineComment(line: string): string {
-  const idx = line.indexOf(";");
-  return idx === -1 ? line : line.slice(0, idx);
+  let quote: '"' | "'" | null = null;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (quote !== null) {
+      if (ch === "\\") {
+        i++; // skip the escaped character
+      } else if (ch === quote) {
+        quote = null;
+      }
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === ";") {
+      return line.slice(0, i);
+    }
+  }
+  return line;
 }
 
 /**
