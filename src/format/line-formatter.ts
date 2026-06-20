@@ -205,6 +205,13 @@ export function formatLine(
     }
   }
 
+  // Label definitions carry a trailing colon (e.g. `LINNUM:`); the parser
+  // strips it, so restore it here. Assignment targets (`NAME = EXPR`) sit in
+  // the label column too but must not get a colon.
+  if (label && operation !== "=") {
+    label = `${label}:`;
+  }
+
   return {
     label,
     operation,
