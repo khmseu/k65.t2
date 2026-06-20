@@ -73,4 +73,3 @@ export function detectColumnWidths(lines: FormattedLine[]): ColumnWidths {
     comment: maxComment,
   };
 }
-

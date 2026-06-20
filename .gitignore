@@ -144,8 +144,8 @@ vite.config.ts.timestamp-*
 .vite/
 
 # Local additions
+docs/README.md
+test/*.bin
+test/*.lst
 test/A6502.jison
 test/m6502.converted.json
-test/m6502.converted.bin
-test/m6502.converted.lst
-docs/README.md

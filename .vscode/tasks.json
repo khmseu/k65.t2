@@ -1,28 +1,71 @@
 {
-  "version": "2.0.0",
   "tasks": [
     {
-      "type": "npm",
-      "script": "test",
-      "group": "test",
-      "problemMatcher": [],
-      "label": "npm: test",
       "detail": "npm run build && node dist/index.js -- test/m6502.converted.asm",
+      "group": "test",
+      "label": "npm: test",
       "presentation": {
-        "reveal": "always",
-        "focus": true
-      }
+        "focus": true,
+        "reveal": "always"
+      },
+      "problemMatcher": [
+        "$tsc"
+      ],
+      "script": "test",
+      "type": "npm"
     },
     {
-      "type": "npm",
-      "script": "test-converter",
-      "problemMatcher": ["$tsc"],
-      "label": "npm: test-converter",
       "detail": "npm run build && node --enable-source-maps test/converter.js",
+      "label": "npm: test-converter",
       "presentation": {
-        "reveal": "always",
-        "focus": true
-      }
+        "focus": true,
+        "reveal": "always"
+      },
+      "problemMatcher": [
+        "$tsc"
+      ],
+      "script": "test-converter",
+      "type": "npm"
+    },
+    {
+      "detail": "npm run test-converter && node --enable-source-maps . test/m6502.converted.asm",
+      "label": "npm: test-assemble",
+      "presentation": {
+        "focus": true,
+        "reveal": "always"
+      },
+      "problemMatcher": [
+        "$tsc"
+      ],
+      "script": "test-assemble",
+      "type": "npm"
+    },
+    {
+      "detail": "npm run test-converter && node --enable-source-maps dist/format-asm.js test/m6502.converted.asm > test/m6502.converted.formatted.asm",
+      "label": "npm: test-format",
+      "presentation": {
+        "focus": true,
+        "reveal": "always"
+      },
+      "problemMatcher": [
+        "$tsc"
+      ],
+      "script": "test-format",
+      "type": "npm"
+    },
+    {
+      "detail": "npm run test-format && node --enable-source-maps . test/m6502.converted.formatted.asm",
+      "label": "npm: test-both",
+      "presentation": {
+        "focus": true,
+        "reveal": "always"
+      },
+      "problemMatcher": [
+        "$tsc"
+      ],
+      "script": "test-both",
+      "type": "npm"
     }
-  ]
+  ],
+  "version": "2.0.0"
 }

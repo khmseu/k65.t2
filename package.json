@@ -9,10 +9,11 @@
   "scripts": {
     "build": "npm run nearleyc && npm run tsc",
     "nearleyc": "node build-parser.js",
-    "test": "npm run build && echo starting... && node --enable-source-maps dist/index.js test/m6502.converted.asm > test/m6502.converted.json; echo done rc=$?",
-    "tsc": "tsc --build",
+    "test-assemble": "npm run test-converter && node --enable-source-maps . test/m6502.converted.asm",
+    "test-both": "npm run test-format && node --enable-source-maps . test/m6502.converted.formatted.asm",
     "test-converter": "npm run build && node --enable-source-maps test/convert.js test/m6502.asm test/m6502.converted.asm",
-    "format": "npm run build && node --enable-source-maps dist/format-asm.js"
+    "test-format": "npm run test-converter && node --enable-source-maps dist/format-asm.js test/m6502.converted.asm > test/m6502.converted.formatted.asm",
+    "tsc": "tsc --build"
   },
   "dependencies": {
     "chevrotain": "^12.0.0",
@@ -21,7 +22,7 @@
   "devDependencies": {
     "@types/moo": "^0.5.10",
     "@types/nearley": "^2.11.5",
-    "@types/node": "^25.9.3",
+    "@types/node": "^26.0.0",
     "typescript": "^6.0.3"
   }
 }
